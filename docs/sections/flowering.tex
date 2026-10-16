@@ -1,16 +1,245 @@
 \section{Flowering: the per-flower Markov chain}\label{sec:flowering}
-\stagebox{\statusprogress. The 3D stage is being built; the 2D Python prototype exists.}{\src{prototype-python/automark_bloom/petal_markov.py} (prototype); 3D core in progress}
+\stagebox{\statusbuilt}{\src{core/src/bloom/mod.rs}, \src{core/src/bloom/program.rs}, \src{core/src/bloom/channels.rs}, \src{core/src/bloom/consume.rs}, \src{core/src/bloom/relax.rs}, \src{core/src/bloom/contact.rs}}
 
-Flowering takes over once the bud structure is fixed. Each growth step depends
-probabilistically on the previous state, and each flower draws from its own
-seed (\cref{sec:seeds}). Siblings already differ in their buds
-(\cref{sec:tiers}); the opening adds its own noise on top.
+Flowering opens the packed bud. It takes each petal's packed sheet and the
+latent channels the bud hands over (\cref{sec:channels}), and steps the whole
+flower through time as a Markov chain: each step depends only on the state at
+the start of the step. Each flower draws from its own seed, so siblings,
+which already differ in their buds (\cref{sec:tiers}), open differently too.
 
-The 3D flowering stage is now being built. Until it lands, this section
-records the prototype that exists and the approved design; it will be
-rewritten when the code is merged.
+\subsection{How it is split}
+Real opening is irreversible cell expansion following a mostly fixed program:
+an S-shaped growth curve that starts with the outer layers. Variation sits on
+top of that program, in each petal's start time and growth rate, and contact
+with neighbours shapes the result. The model copies that split:
+\begin{itemize}[leftmargin=*]
+\item a \emph{channel program} (\cref{sec:opening-program}) says how each
+  quantity moves toward its goal over time; the only noise is a slowly drifting
+  rate per petal;
+\item a \emph{pose} (\cref{sec:opening-pose}) turns the channels into where
+  each petal would like to be: its centre line, width, cup, splay and
+  crumples, plus rest lengths and thickness;
+\item a \emph{relaxation} (\cref{sec:opening-relax}) pulls the petals toward
+  their poses while keeping them from passing through each other or the core.
+\end{itemize}
+Curl, reflex, cup and splay are therefore prescribed shapes that bending and a
+weak pose spring pull toward, not the product of differential growth. Only the
+margin ruffling (edge growth and left-right asymmetry) comes from differential
+rest lengths.
 
-\subsection{The prototype (2D, discrete)}
+\paragraph{Time.} The opening runs from $t=0$ (the bud) to $t=1$ in
+$N = 24$ steps of $\Delta t = 1/24$ by default. Step $k$ advances every channel
+from $t_k = k/N$ to $t_{k+1}$, builds every petal's pose, relaxes, and records a
+frame at $t_{k+1}$. Steps can be split into substeps, with a frame written
+after each full step.
+
+\paragraph{Random stream.} The opening's seed is
+$\mathrm{derive}(s_i, \texttt{0x0B100000})$ from the flower seed $s_i$. Every
+channel then gets its own generator keyed by the FNV-1a hash of its name, and
+within a channel each petal has its own PCG32 stream, so adding a channel
+never changes the draws of any other (a test checks this).
+
+\subsection{Latent channels}\label{sec:channels}
+\stagebox{\statusbuilt}{\src{core/src/channels.rs}, \src{core/src/latents.rs}, \src{core/src/bloom/channels.rs}}
+
+New latent quantities, such as colour gradients for the logistic-map stage
+(\cref{sec:colour}), must be addable without modifying the opening machinery.
+Every latent quantity is therefore a generic \emph{channel}:
+\begin{itemize}[leftmargin=*]
+\item A channel is declared once with a name, a scope (flower, petal or
+  point), a number of dimensions (1 or 3), an optional range, an update rule
+  and a default value. Categorical channels also carry value labels. Consumers
+  look channels up by name and the machinery never knows what one means.
+\item A rule's parameters are either constants or the names of other
+  channels. A channel may read channels of its own or a coarser scope (a petal
+  channel can read a flower channel, not a point channel). Unknown names,
+  duplicate names and mismatched dimensions are rejected when the program is
+  built.
+\item The flower JSON carries the declarations and the values generically
+  (\cref{sec:output}).
+\end{itemize}
+
+\paragraph{Rules.} With $x$ the value at $t_k$ and every parameter read from the
+state at $t_k$ (so the result does not depend on the order of channels):
+\begin{itemize}[leftmargin=*]
+\item \emph{fixed} and \emph{state}: unchanged by the stepper (a state
+  channel is written by the stage that owns it);
+\item \emph{drift}: mean-reverting noise (Euler--Maruyama),
+  \[
+    x \leftarrow x + r\,(\mu - x)\,\Delta t + \sigma\sqrt{\Delta t}\;\xi, \qquad \xi\sim\Norm(0,1);
+  \]
+\item \emph{growth}: moves toward a goal $g = \text{gain}\cdot\text{target} +
+  \text{bias}$ inside a window that opens at the channel's onset and lasts
+  $D$. With $S(t) = \operatorname{smoothstep}\bigl(\clamp((t - \text{onset})/D, 0, 1)\bigr)$
+  and $\operatorname{smoothstep}(y) = y^2(3-2y)$,
+  \[
+    x \leftarrow x + (g - x)\,\min\Bigl(1,\; \text{rate}\,\frac{S(t_{k+1}) - S(t_k)}{1 - S(t_k)}\Bigr),
+  \]
+  and nothing happens outside the window. With rate 1 and a constant goal, $x$
+  lands exactly on the goal when the window closes; slower petals stop short
+  and faster ones arrive early. A \emph{monotone} growth never moves
+  backwards;
+\item \emph{derived}: $x = \text{gain}\cdot\operatorname{sgn}(y)\,|y|^p + \text{bias}$
+  of another channel $y$, evaluated from the start.
+\end{itemize}
+Only drift draws random numbers.
+
+\paragraph{What the bud hands over.} The bud declares these channels with the
+kinds \emph{target}, \emph{fixed} and \emph{state}; the opening program gives
+each its rule. With $\delta_j\in[0,1]$ the petal's depth
+in the bud (0 innermost layer, 1 outermost), $n$ the plant's
+\texttt{latent\_noise}, $\xi\sim\Norm(0,1)$ from the channel's own stream, and
+``noisy'' meaning $x(1 + n\,\xi)$:
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Channel & Scope & Kind & Value \\
+\midrule
+\texttt{target\_length} & petal & target & noisy size potential $\times$ (0.5 + fraction of shell rows its patch reached) \\
+\texttt{target\_width} & petal & target & noisy size potential $\times$ (0.3 + widest row in cells / 24) \\
+\texttt{edge\_growth} & petal & target & noisy \texttt{edge\_boost} \\
+\texttt{cup} & petal & target & noisy blend from \texttt{cup\_inner} to \texttt{cup\_outer} by depth, in $[0,1]$ \\
+\texttt{base\_fold} & petal & target & noisy blend from \texttt{fold\_inner} to \texttt{fold\_outer} by depth, in $[0,1]$ \\
+\texttt{onset} & petal & fixed & $\texttt{onset\_spread}\,(1-\delta_j) + 0.05\,\xi$, in $[0,1]$; outer petals open first \\
+\texttt{bud\_growth} & petal & state & mean accumulated growth $S$ of the petal's nodes \\
+\texttt{petal\_type} & petal & fixed & flat, cupped or rolled, by the species weights \\
+\texttt{twist} & petal & fixed & $+1$ (clockwise) or $-1$ \\
+\texttt{vigour} & flower & fixed & the flower's vigour $\nu$ \\
+\texttt{sepal\_radius} & flower & state & envelope radius $R$ at the end of the bud stage \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The opening adds one input of its own, \texttt{layer\_depth}: the petal's
+layer divided by the outermost layer of the bud (0 innermost, 1 outermost).
+Bud channels that no rule mentions pass through unchanged and are exported.
+
+\subsection{The peony opening program}\label{sec:opening-program}
+The program is data: a list of channel declarations. In the default one,
+$\delta$ is the layer depth and every growth window lasts $D = 0.55$ from the
+petal's \texttt{onset}, at the petal's \texttt{rate}:
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l l X@{}}
+\toprule
+Channel & Rule & Meaning \\
+\midrule
+\texttt{rate} & drift to \texttt{vigour}, $r=3$, $\sigma=0.35$ & per-petal speed, from 1; a fast petal tends to stay fast \\
+\texttt{length} & growth to \texttt{target\_length}, monotone & length factor, from 1 \\
+\texttt{width} & growth to $1.6\,$\texttt{target\_width}, monotone & width factor, from 1 \\
+\texttt{edge} & growth to $0.25\,$\texttt{edge\_growth}, monotone & extra margin length (flare, ruffles), from 0 \\
+\texttt{cupping} & growth to \texttt{cup} & cupping across the blade, from 0 \\
+\texttt{reflex} & growth to $0.6\,$\texttt{base\_fold} & outward fold at the base (rad), from 0 \\
+\texttt{asymmetry} & growth to $0.08\,$\texttt{twist} & left-right margin difference, from 0 \\
+\texttt{splay\_angle} & derived, $0.35 + 1.30\,\delta^3$ & where the petal ends up pointing (rad from vertical) \\
+\texttt{splay} & growth to 1, monotone & how far the petal has turned toward its splay angle, from 0 \\
+\texttt{curl\_keep} & derived, $0.8 - 0.65\,\delta^3$ & how much of its bud curl a petal keeps \\
+\texttt{memory} & growth to $0.6\,$\texttt{cup} $+$ \texttt{curl\_keep} & bud curl along the petal, from 1 \\
+\texttt{wrap} & growth to $0.5\,$\texttt{cup} $+$ \texttt{curl\_keep} & bud wrap round the axis, from 1 \\
+\texttt{ruffle} & growth to 0.6 & how much of the bud's crumpling stays, from 1 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+The rate's stationary spread is $0.35/\sqrt{2\cdot3} \approx 0.14$. The splay
+and curl profiles come from the species' opening shape (angle 0.35 to 1.65 rad,
+curl kept 0.8 to 0.15, exponent 3), so outer petals open wide and flatten while
+the innermost stay upright and incurved over the centre, as in a peony. Bud
+channels supply the targets; the program's own defaults (length 1.5, width
+1.3, cup 0.5, fold 0.3, edge 1, twist 0) apply only when a bud lacks them.
+
+\paragraph{Timing.} The bud sets \texttt{onset} from 0 for the outermost layer
+up to \texttt{onset\_spread} (0.4 to 0.8) for the innermost. A window that
+starts after $t = 0.45$ is still open at $t = 1$, so in the default program the
+innermost petals are still opening on the last frame (at onset 0.8 and rate 1
+they are about 30\% of the way there), much as a peony looks just after it
+opens.
+
+\subsection{From channels to a pose}\label{sec:opening-pose}
+For each petal, on its $11\times19$ control grid, the pose is built from the
+petal's laid-out sheet (where it sat on its shell before packing) and its
+packed sheet:
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Centre line.} The laid sheet's centre column is a curve in its
+  meridian plane. It is redrawn with each turning angle scaled by
+  \texttt{memory}, an extra outward turn of \texttt{reflex} radians spread over
+  a hinge near the base, $h(f) = \exp(-((f-0.12)/0.1)^2)$, and segments
+  stretched by the length factor (ramped in over the first 15\% of the petal).
+\item \textbf{Splay.} The angle of the chord from base to tip is moved a
+  fraction \texttt{splay} of the way to \texttt{splay\_angle}, by adding to the
+  base fold and redrawing the curve (four corrections).
+\item \textbf{Rows.} Each row is widened by the width factor (ramped in over
+  the first 25\%), but at most until it spans half a turn round the axis; a row
+  already wider in the bud keeps its width. Without that cap, a petal that
+  wraps far round a small core spirals through its neighbours as it widens.
+  The row is blended between lying on its circle (\texttt{wrap}) and lying
+  flat on its tangent, then dipped by $\tfrac12 k\,\text{arc}^2$ with a
+  curvature $k$ set by \texttt{cupping}.
+\item \textbf{Crumples.} The bud's crumpling (the packed sheet's offset from
+  the laid one, in the petal's own frame of normal, across and along) is added
+  back scaled by \texttt{ruffle}. Which face is outward is decided once on the
+  laid sheet: deciding it again on a nearly horizontal, splayed petal would
+  flip its crumples to the other face.
+\end{enumerate}
+
+\paragraph{Rest lengths and thickness.} Springs take their length in the pose,
+times a margin factor
+\[
+  e = \bigl(1 + \text{edge}\,(2f_u-1)^2 f\bigr)\bigl(1 + \text{asym}\,(2f_u-1)\, f\bigr)
+\]
+on springs along the petal ($\sqrt{(1+e^2)/2}$ on diagonals), where $f_u$ runs
+across the petal, $f$ from base to tip, and asym is \texttt{asymmetry}. So the margins want to be longer than the midline and
+ruffle. Thickness thins with area, $t = t_0\,\max(A, 1)^{-0.6}$, where $A$ is
+the local product of length, width and margin factors.
+
+With all channels at their neutral values the pose is the packed bud exactly
+(a test checks this to $10^{-9}$).
+
+\subsection{Relaxation}\label{sec:opening-relax}
+Each step relaxes the control points toward the pose by minimising
+\[
+  E = E_{\mathrm{spring}} + E_{\mathrm{bend}} + E_{\mathrm{pose}} + E_{\mathrm{contact}} + E_{\mathrm{core}}:
+\]
+\begin{itemize}[leftmargin=*]
+\item springs along, across and diagonally in each cell, stiffness 40 (10 on
+  diagonals), at the pose's rest lengths;
+\item bending on every three consecutive points along each direction,
+  $\tfrac12\cdot20\,(t_0/t_{\mathrm{cap}})^3\,\lVert\vect r\rVert^2$, with
+  $\vect r$ the second difference of the displacement from the pose, so the
+  pose's own curvature costs nothing;
+\item a weak pose spring $\tfrac12\cdot2\,\lVert\x - \vect p\rVert^2$;
+\item contact between petals, $\tfrac12\cdot1500\,[d_{\min}-d]_+^2$, evaluated on
+  $2\times2$ samples per grid cell (777 per petal) against the other petals'
+  triangles, each sample's force spread back to its four control points
+  bilinearly so the gradient stays exact;
+\item the core, $\tfrac12\cdot400\,[R_0 + t/2 - \rt(\x)]_+^2$.
+\end{itemize}
+There is no sepal envelope and no layer band any more; the base row stays
+pinned. Contact is a soft penalty, and the worst overlap is reported per frame.
+
+Contact candidates are found as in the bud (\cref{sec:packing}), with a skin
+of one thickness cap: a flat grid of samples, a plane test before the exact
+closest-point test, distance bounds that skip pairs which cannot touch, and a
+rebuild only for petals that moved more than a quarter of the skin, merged with
+the kept pairs of petals that did not.
+
+FIRE runs 20 iterations per step ($\Delta t_{\max} = 0.06$, steps clipped to a
+quarter of the thickness cap, without the bud's per-node masses). Each step
+starts from the previous positions shifted by how much the pose moved, and
+carries FIRE's velocity and step size over from the previous step, so the
+opening is one continuous relaxation of 480 iterations.
+
+\subsection{Output}
+The opening returns one frame per step at $t = 1/24, \dots, 1$, each with
+every petal's control grid, thickness and channel values, its energy and its
+worst overlap. Export appends them to the bud's flower JSON as frames with
+\texttt{stage: "open"} (\cref{sec:output}). The command-line tool runs it with
+\texttt{--open N}; the browser build does not run the opening, and the viewer
+plays a precomputed sample.
+
+\subsection{The 2D prototype}
+The first opening model, in \src{prototype-python/automark_bloom/petal_markov.py},
+ran on the flat 2D bud. It is kept for reference; the 3D stage above replaces
+it.
+
 \paragraph{State.} Each petal carries three bin indices: length $\lambda$ (14 bins,
 0.08 to 0.72 flower radii), width $\omega$ (12 bins, 0.06 to 0.60) and curl
 $\gamma$ (13 bins, $-20^\circ$ to $100^\circ$; positive cups inward, negative
@@ -53,118 +282,6 @@ $30^\circ\min(P,1)$, so crowded petals bend instead of spreading. Because $P$
 couples petals, the Markov property holds for the joint state of all petals,
 not for each petal on its own.
 
-\subsection{The approved 3D design}\label{sec:flowering-design}
-\stagebox{\statusplanned}{\src{automark-bloom/species/design-decisions-opening.md} (shared folder)}
 
-\paragraph{Opening is growth plus relaxation.} Real opening is irreversible
-cell expansion following a mostly fixed program: an S-shaped growth curve that
-starts with the outer layers. Variation sits on top of that program, in each
-petal's start time and growth rate, and contact with neighbours shapes the
-result. The model copies that split:
-\begin{itemize}[leftmargin=*]
-\item the \emph{growth program} (species tier, \cref{sec:tiers}) sets how fast
-  each quantity should grow at each age;
-\item the \emph{Markov chain} supplies only the noise, through a slowly
-  drifting rate factor per petal;
-\item the bud stage's \emph{energy relaxation} (\cref{sec:packing}) turns the
-  grown quantities into geometry.
-\end{itemize}
-Curl, reflex and ruffles come out of differential growth plus contact. They
-are not an independent curl state as in the prototype.
-
-\paragraph{State.} The chain is Markov over the whole flower: the state at a
-step holds everything the next step needs. Per petal $j$ that is its sheet
-geometry $X_j$, its accumulated growth quantities $\vect q_j$, a rate factor
-$\rho_j$ and its age $a_j$. The growth quantities are
-\begin{center}\small
-\begin{tabular}{@{}ll@{}}
-\toprule
-Quantity & Shape it produces \\
-\midrule
-length, width & size \\
-edge growth versus midline & flare and ruffling \\
-one-face growth at the base & reflex (folding back) \\
-face-versus-face growth across the blade & cupping \\
-left versus right edge growth (optional) & twist, lopsided curl \\
-\bottomrule
-\end{tabular}
-\end{center}
-Thickness thins as area grows and stays under the cap $\tmax$. A row widens
-at most until it spans half a turn round the axis (a row already wider in the
-bud keeps its width), so a petal that wraps far round a small core does not
-spiral through its neighbours.
-
-\paragraph{One step.} Each step
-\begin{enumerate}[leftmargin=*]
-\item drifts each rate factor by mean-reverting noise, for example
-  $\rho_j \leftarrow \bar\rho + \kappa(\rho_j - \bar\rho) + s\,\xi_j$ with
-  $\xi_j\sim\Norm(0,1)$, so a petal that starts fast tends to stay fast;
-\item adds growth increments $\Delta\vect q_j = \rho_j\, G(a_j;\ \text{latents}_j)$
-  from the growth program $G$, never negative for size;
-\item maps the new growth quantities to the energy's targets (rest lengths and
-  preferred curvature) and relaxes the energy, so petals keep their thickness
-  and never pass through each other;
-\item writes a frame of the flower JSON with the same topology
-  (\cref{sec:output}).
-\end{enumerate}
-Each petal has its own noise on every quantity, so petals differ in rate and in
-how they curl, as well as through their layer and their contacts.
-
-\paragraph{Inputs: the bud's latent quantities.} The chain starts from each
-petal's packed sheet and its latent quantities (\cref{sec:tiers}): growth
-potentials, shape tendencies, timing and fixed type.
-
-\subsection{Latent channels}\label{sec:channels}
-\stagebox{\statusbuilt{} for the channel store and the bud's channels; the opening stepper is \statusplanned}{\src{core/src/channels.rs}, \src{core/src/latents.rs}}
-
-New latent quantities, such as colour gradients for the logistic-map stage
-(\cref{sec:colour}), must be addable without modifying the opening machinery.
-Every latent quantity is therefore a generic \emph{channel}:
-\begin{itemize}[leftmargin=*]
-\item A channel is declared once with a name, a scope (point, petal or
-  flower), a number of dimensions, an optional range and a kind: \emph{fixed}
-  (never changes), \emph{target} (a goal a growth quantity moves toward) or
-  \emph{state} (updated by the stage that owns it). Categorical channels also
-  carry value labels. Consumers look channels up by name and the machinery
-  never knows what one means.
-\item Each channel draws from its own random sub-stream keyed by a hash of its
-  name (\cref{sec:seeds}), so adding a channel never shifts the draws of the
-  others. A test checks this.
-\item The flower JSON carries the declarations and the values generically
-  (\cref{sec:output}).
-\end{itemize}
-
-\paragraph{What the bud hands over.} With $\delta_j\in[0,1]$ the petal's depth
-in the bud (0 innermost layer, 1 outermost), $n$ the plant's
-\texttt{latent\_noise}, $\xi\sim\Norm(0,1)$ from the channel's own stream, and
-``noisy'' meaning $x(1 + n\,\xi)$:
-\begin{center}\small
-\begin{tabularx}{\linewidth}{@{}l l l X@{}}
-\toprule
-Channel & Scope & Kind & Value \\
-\midrule
-\texttt{target\_length} & petal & target & noisy size potential $\times$ (0.5 + fraction of shell rows its patch reached) \\
-\texttt{target\_width} & petal & target & noisy size potential $\times$ (0.3 + widest row in cells / 24) \\
-\texttt{edge\_growth} & petal & target & noisy \texttt{edge\_boost} \\
-\texttt{cup} & petal & target & noisy blend from \texttt{cup\_inner} to \texttt{cup\_outer} by depth, in $[0,1]$ \\
-\texttt{base\_fold} & petal & target & noisy blend from \texttt{fold\_inner} to \texttt{fold\_outer} by depth, in $[0,1]$ \\
-\texttt{onset} & petal & fixed & $\texttt{onset\_spread}\,(1-\delta_j) + 0.05\,\xi$, in $[0,1]$; outer petals open first \\
-\texttt{bud\_growth} & petal & state & mean accumulated growth $S$ of the petal's nodes \\
-\texttt{petal\_type} & petal & fixed & flat, cupped or rolled, by the species weights \\
-\texttt{twist} & petal & fixed & $+1$ (clockwise) or $-1$ \\
-\texttt{vigour} & flower & fixed & the flower's vigour $\nu$ \\
-\texttt{sepal\_radius} & flower & state & envelope radius $R$ at the end of the bud stage \\
-\bottomrule
-\end{tabularx}
-\end{center}
-
-\paragraph{How the opening will use them (design).} Each channel kind gets an
-update rule from a small set (monotone growth toward a target, mean-reverting
-drift, fixed), and the stepper loops over channels without knowing what they
-mean. Channels the geometry uses feed the relaxation step through one mapping
-layer; a channel the geometry ignores, such as colour, simply evolves and is
-exported. Adding a channel means declaring it and, if needed, its consumer. The
-stepper, the random streams and the export format stay unchanged.
-
-\paragraph{Ideas still to fold in} from the original design notes: phyllotactic
-spiral angle and petals growing larger outward.
+\paragraph{Ideas still to fold in} from the original design notes: a
+phyllotactic spiral angle (\cref{sec:future}).

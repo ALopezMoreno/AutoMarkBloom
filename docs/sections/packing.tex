@@ -18,7 +18,7 @@ never moves.
 
 \subsection{The energy}
 \[
-  E(X, R) = E_{\mathrm{spring}} + E_{\mathrm{band}} + E_{\mathrm{env}} + E_{\mathrm{sepal}} + E_{\mathrm{contact}}.
+  E(X, R) = E_{\mathrm{spring}} + E_{\mathrm{bend}} + E_{\mathrm{band}} + E_{\mathrm{env}} + E_{\mathrm{sepal}} + E_{\mathrm{contact}}.
 \]
 Every term is a spring or a squared hinge $\tfrac12 k\,[\,\cdot\,]_+^2$, so $E$ is
 continuously differentiable ($C^1$) and has an exact gradient with respect to
@@ -48,12 +48,35 @@ the spring's first point and $k_b$ is the plant's \texttt{petal\_stiffness}
 (60 to 120 for peony): stiffer petals fold in broader waves and push the
 sepals out more.
 
-Every spring starts with its laid-out length $\ell^0_{ab}$ as its rest length.
-After each growth stage the rest length follows the growth of its two ends,
+\paragraph{Zigzag-resistant bending.} A skip spring between points two apart
+cannot feel a single point popping in and out between them, so on its own the
+sheet crinkles at the scale of the grid. A second bending term acts on every
+three consecutive points $a,b,c$ along $u$ and along $v$, through their second
+difference $\vect d = \x_a - 2\x_b + \x_c$:
 \[
-  \ell_{ab} = \ell^0_{ab}\,\tfrac12\bigl(S_a + S_b\bigr),
+  E_{\mathrm{bend}} = \sum_{(a,b,c)} \tfrac12 k_{abc}\bigl(\lVert\vect d\rVert - r_{abc}\bigr)^2,
+  \qquad k_{abc} = \zeta\,k_b\,(t_a/\tmax)^3,
 \]
-where $S_i$ is node $i$'s accumulated linear growth (\cref{sec:growth}). Where
+where $\zeta$ is the plant's \texttt{zigzag\_bending} (3 to 5 for peony) and the
+rest value $r^0_{abc}$ is the laid-out second difference, so the shell's own
+curvature costs nothing. With $c = k_{abc}(\lVert\vect d\rVert - r_{abc})/\lVert\vect d\rVert$
+the gradient is $c\,\vect d$ on $a$ and $c$, and $-2c\,\vect d$ on $b$. Setting
+$\zeta = 0$ removes the term and brings the grid-scale crinkle back.
+
+Every spring starts with its laid-out length $\ell^0_{ab}$ as its rest length.
+After each growth stage the rest length follows the growth of its two ends
+along the spring's own direction,
+\[
+  \ell_{ab} = \ell^0_{ab}\,\tfrac12\bigl(G_a + G_b\bigr),
+  \qquad
+  G = \begin{cases} A^\perp & \text{springs along } u \text{ (across the petal)},\\
+  A^\parallel & \text{springs along } v \text{ (base to tip)},\\
+  S = \sqrt{A^\parallel A^\perp} & \text{diagonal springs,}\end{cases}
+\]
+where $A^\parallel_i$ and $A^\perp_i$ are node $i$'s accumulated growth along
+and across the petal (\cref{sec:growth}). A bend's rest value is
+$r^0_{abc}$ times the middle node's $A^\perp$ or $A^\parallel$, by its
+direction. Where
 growth is uneven, neighbouring springs disagree about how long the petal
 should be, and the sheet can only satisfy them by buckling out of its surface.
 
@@ -145,21 +168,43 @@ on 60 point coordinates and on $R$.
 
 \subsection{The growth automaton}\label{sec:growth}
 Each petal carries a second stochastic automaton on its own $\NU\times\NV$
-node grid, drawing from stream 3 of the flower's seed. Every node $i$ has an
-accumulated linear growth $S_i$ (starting at 1) and is either active or quiet
-in each stage. The base row never grows.
+node grid, drawing from stream 3 of the flower's seed (one generator shared by
+all petals, in petal order). Every node $i$ carries accumulated growth along
+the petal $A^\parallel_i$ and across it $A^\perp_i$ (both starting at 1, with
+$S_i = \sqrt{A^\parallel_i A^\perp_i}$), a persistent noise value $z_i$, and an
+active or quiet flag for each stage. The base row never grows.
 
-\paragraph{Activity.} In each stage a node becomes active with probability
+\paragraph{Correlated, persistent noise.} Each stage every petal draws a fresh
+field $\varepsilon$ of $\NU\NV$ standard normals, smooths it with
+$\round(c_g^2)$ passes of the neighbour-averaging below, and rescales
+it to zero mean and unit variance over the rows $v\ge1$. Here $c_g$ is the
+plant's growth correlation (\texttt{growth\_\allowbreak correlation}, 1 to 2
+for peony, so 1 to 4 passes). The node's noise then evolves as
 \[
+  z_i \leftarrow \rho\,z_i + \sqrt{1-\rho^2}\;\varepsilon_i
+\]
+(on the first stage $z = \varepsilon$), with $\rho$ the
+\texttt{growth\_persistence} (0.5 to 0.8). This keeps $z$ at unit variance while
+making it correlated in space over $c_g$ nodes and in time over a few stages,
+so growing patches are smooth and tend to keep growing.
+
+\paragraph{Activity.} In each stage a node with $v\ge1$ is active when
+\[
+  \Phi(z_i) < p_i, \qquad
   p_i = a_0 + a_1\,\frac{n^{\mathrm{on}}_i}{n_i} - a_p \min(P_i, 1),
 \]
-where $n^{\mathrm{on}}_i$ of its $n_i$ grid neighbours (up to four) were active
-in the previous stage and $P_i$ is the contact pressure it felt in the last
+where $\Phi(z) = \tfrac12\bigl(1 + \operatorname{erf}(z/\sqrt2)\bigr)$ is the
+normal distribution function, so $\Phi(z_i)$ is uniform on $[0,1]$ and a node is
+active with probability $p_i$, but neighbouring nodes and successive stages
+share their coins through $z$. Here $n^{\mathrm{on}}_i$ of its $n_i$ grid
+neighbours (up to four, the row below always counting) were active in the
+previous stage and $P_i$ is the contact pressure it felt in the last
 relaxation (below). Growth therefore comes in patches that spread and fade,
 and crowded tissue slows down.
 
-\paragraph{Growth increment.} An active node grows by $\gamma$ and a quiet one
-by $q\gamma$. The claw next to the receptacle grows less, and margins grow
+\paragraph{Growth increment.} An active node grows by $\gamma$
+(\texttt{growth\_rate}, 0.10 to 0.16 for peony, times the flower's vigour) and a
+quiet one by $q\gamma$. The claw next to the receptacle grows less, and margins grow
 more:
 \[
 \begin{gathered}
@@ -172,7 +217,16 @@ so $m$ is 1 on the side edges and tip and fades to 0 two nodes in. The
 increments are then smoothed by three passes that replace each node's value by
 the mean of itself and its grid neighbours, as growth signals diffuse through
 tissue, so folds come out as smooth bulges rather than node-sized kinks.
-Finally $S_i \leftarrow S_i(1 + \delta_i)$.
+Finally the increment is split between length and width by the plant's
+anisotropy $a$ (\texttt{growth\_anisotropy}, $-0.25$ to $0.15$):
+\[
+  A^\parallel_i \leftarrow A^\parallel_i\bigl(1 + \delta_i(1+a)\bigr),
+  \qquad
+  A^\perp_i \leftarrow A^\perp_i\bigl(1 + \delta_i(1-a)\bigr).
+\]
+A positive $a$ lengthens petals faster than it widens them, so they buckle
+into waves across the petal; a negative $a$ widens them, so they pleat in folds
+fanning from base to tip.
 
 \paragraph{Pressure.} The pressure on a node is the sum of the contact forces
 $k_{\mathrm{contact}}(d_{\min}-d)$ it takes part in (shared among a triangle's
@@ -194,39 +248,66 @@ corresponds to a contact force of $k_{\mathrm{contact}}\,\tmax/4$.
   $R_{\mathrm{rest}} = R_{\mathrm{env}}\bigl(1 + g_s\,g/G\bigr)$; relax.
 \item \textbf{Settle.} After the last stage, relax for longer.
 \end{enumerate}
-Defaults: 60 relaxation iterations per stage and 150 to settle.
+Defaults: 60 relaxation iterations per stage and 150 to settle. The fast
+preview preset uses 25 and 50 (not canonical, \cref{sec:output}); tests use 15
+and 15.
 
 \paragraph{Coarse to fine.} The first $\lfloor 0.7\,G\rfloor$ stages only set
 the bud's broad shape, so they are relaxed on every other control point (a
 $6\times10$ grid per petal instead of $11\times19$), about four times cheaper per
-iteration. Springs and bends join neighbours on that grid, with rest lengths
-from the same laid-out sheet and growth read at their end nodes; skip-spring
-bending stiffness is divided by 4, since a spring twice as long resists the
+iteration. The first relaxation (symmetry breaking) already runs on it.
+Springs and bends join neighbours on that grid, with rest lengths from the same
+laid-out sheet and growth read at their end nodes; both bending stiffnesses
+(skip springs and second differences) are divided by 4, since a spring twice as long resists the
 same curvature four times as hard. The growth automaton still runs on the full
 grid: each node's pressure is interpolated bilinearly from the coarse grid.
-Then positions are interpolated back onto the full grid (the pinned base row
-keeps its own), the bud is relaxed once more, and the remaining stages, where
+Then positions are interpolated back onto the full grid (coarse points are
+copied, edge midpoints take the mean of their two coarse neighbours and cell
+centres the mean of four; the pinned base row keeps its own), the bud is relaxed once more, and the remaining stages, where
 the petals crumple, run at full resolution. A fraction of 0 restores full
-resolution throughout (\texttt{PackSettings::coarse\_fraction}).
+resolution throughout (\texttt{PackSettings::coarse\_fraction}). Recorded
+frames from the coarse stages are interpolated the same way, and the report's
+starting energy is measured on the coarse grid.
 
 \paragraph{Relaxation by FIRE.} The energy is minimised by FIRE (Fast Inertial
 Relaxation Engine), gradient descent with inertia that is reset whenever it
 starts climbing. The envelope radius $R$ is one more coordinate with its own
-velocity, included in the power and norms. With velocities $\vect v$ (pinned
+velocity, included in the power and norms.
+
+\paragraph{Per-node masses.} Stiff and soft parts of the bud (a thick base in
+contact, a free thin edge) would otherwise need very different step sizes.
+Each point gets a mass from the stiffness acting on it,
+\[
+  m_i = \max\bigl(d_i/200,\; 10^{-3}\bigr),
+\]
+where $d_i$ sums the stiffness of every spring at the point, $\zeta k$ at each
+end of a bend and $4\zeta k$ at its middle, $k_{\mathrm{contact}}$ for every
+candidate pair it is the point of and $k_{\mathrm{contact}}/3$ for every pair
+whose triangle it is a corner of, and $k_{\mathrm{env}}$ or $k_{\mathrm{band}}$
+when it is within reach of the envelope, the core or its band edge. The
+envelope's mass sums $k_s$, $k_{\mathrm{env}}$ for each point near it and
+$k_{\mathrm{band}}\lambda_k^2$ for each point near its band edge. FIRE runs in
+mass-scaled coordinates $\vect y = \sqrt m\,\x$, and the masses are recomputed
+at the start of each relaxation and after every contact-list rebuild.
+
+With velocities $\vect v$ and scaled force $\vect f = -\nabla E/\sqrt m$ (pinned
 points have zero gradient and never move), each iteration:
 \begin{enumerate}[leftmargin=*]
-\item computes $\nabla E$ and the power $P = -\nabla E\cdot \vect v$;
+\item computes $\nabla E$ and the power $P = \vect f\cdot \vect v$;
 \item if $P > 0$, steers the velocity toward the downhill direction,
-  $\vect v \leftarrow (1-\alpha)\vect v - \alpha\,\lVert\vect v\rVert\,\nabla E/\lVert\nabla E\rVert$,
+  $\vect v \leftarrow (1-\alpha)\vect v + \alpha\,\lVert\vect v\rVert\,\vect f/\lVert\vect f\rVert$,
   and after more than 5 such steps in a row sets
   $\Delta t \leftarrow \min(1.1\,\Delta t, \Delta t_{\max})$ and $\alpha \leftarrow 0.99\,\alpha$;
 \item if $P \le 0$, stops: $\vect v \leftarrow 0$, $\Delta t \leftarrow \Delta t/2$, $\alpha\leftarrow 0.1$;
-\item integrates $\vect v \leftarrow \vect v - \Delta t\,\nabla E$ and moves each
-  point and $R$ by $\Delta t\,\vect v$, with each step clipped to at most
-  $\tmax/4$ so no petal can jump through another.
+\item integrates $\vect v \leftarrow \vect v + \Delta t\,\vect f$ and moves each
+  point by $\Delta t\,\vect v/\sqrt{m_i}$ (and $R$ likewise with its own mass),
+  with each point's step clipped to length at most $\tmax/4$, and $R$'s to
+  $\tmax/4$, so no petal can jump through another.
 \end{enumerate}
-Each relaxation starts from $\Delta t = \Delta t_{\max}/2$ with
-$\Delta t_{\max} = 0.03$ and $\alpha = 0.1$.
+Each relaxation starts from zero velocity, $\Delta t = \Delta t_{\max}/2$ with
+$\Delta t_{\max} = 0.3$ and $\alpha = 0.1$, and runs a fixed number of
+iterations; there is no convergence test, which keeps the run identical on
+every platform.
 
 \subsection{Finding contacts cheaply}
 Testing every point against every triangle would be quadratic in the number of
@@ -234,7 +315,10 @@ petals. Instead a list of candidate (point, triangle) pairs closer than
 \[
   \text{reach} = \tmax + \text{skin}, \qquad \text{skin} = 2\tmax,
 \]
-is built with a uniform grid, and reused until some point has moved more than
+is built with a flat uniform grid (points counting-sorted into cells of size
+$\max(\text{reach}, \text{extent}/64)$, enlarged by half while there are more
+than $4n+64$ cells, and each triangle's padded bounding box scanned row by
+row), and reused until some point has moved more than
 half the skin since the list was built; it is also rebuilt at the start of
 every stage. Contacts only matter below $d_{\min}\le\tmax$, and a point and a
 triangle that each moved less than half the skin cannot have closed more than
@@ -257,7 +341,8 @@ The core reports the energy terms before and after, the number of stages,
 relaxation iterations and contact-list rebuilds, the worst overlap between two
 petals $\max(d_{\min} - d)/\tmax$, the worst excursion outside a layer's band
 $\max\epsilon_i/\tmax$, the envelope radius at the start and end (how much the
-bud swelled), and the mean and largest accumulated growth $S_i$. These go into
+bud swelled), and the mean and largest accumulated growth $S_i$. Its
+iteration and rebuild counts cover only the full-grid stages. These go into
 the flower JSON's \texttt{meta} block. With frame recording on, the geometry and
 envelope radius after every stage are kept, so the viewer can play the bud
 swelling (\cref{sec:output}).
@@ -269,4 +354,7 @@ with gentle buckling, and the inner petals stopped partway up. Real peony buds
 swell like marshmallows and pack in complex folds, so the rework added
 per-node growth from the automaton, a sepal envelope that gives way, a loose
 band so petals can cross layers, and a finer $11\times19$ grid that can hold
-small crumples.
+small crumples. Later changes made growth correlated, persistent and
+directional, added the zigzag-resistant bending term against grid-scale
+crinkle, preconditioned FIRE with per-node masses, and moved the early stages
+to a coarse grid.
