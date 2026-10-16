@@ -1,81 +1,436 @@
 \section{The stochastic automaton on each shell}\label{sec:ca}
 \stagebox{\statusbuilt}{\src{core/src/ca.rs}}
 
-The automaton makes the discrete decisions: how many petals the bud has, where
-each one attaches, and what patch of its shell it wins. It is a cellular
-automaton with stochastic rules, so strictly it is not a pure CA. It runs
-once per flower, from the plant's traits and stream 1 of the flower's seed, so
+The automaton makes the discrete decisions about a bud: how many petals it
+has, where each one attaches, how tall it may grow, and which patch of its
+shell it ends up owning. It is a cellular automaton with stochastic rules
+(strictly not a pure CA, because a cell's update draws random numbers and
+initiation reads a non-local field). It runs once per flower, from the
+flower's traits and stream 1 of the flower's seed (\cref{sec:seeds}), so
 siblings get different petal counts and placements from the same rules.
 
-\subsection{Grid}
-Each shell carries a grid of $\NA = 96$ azimuth cells by $\NP = 28$ polar rows.
-Row 0 is the attachment ring and rows run up toward the top. Cell $(r,s)$ has
-azimuth $\theta_s = (s + \tfrac12)\,2\pi/\NA$ and wraps around in $s$. Each cell
-is empty or owned by one petal.
+This section first states the rules exactly, then explains what each one does
+to the result, and then follows one real flower through every step
+(\cref{sec:ca-example}).
 
-Shells are processed from the innermost ($k=0$) outward, and each shell runs two
-phases.
+\subsection{Inputs and outputs}
+\paragraph{Inputs.} From the flower's traits (\cref{sec:traits}): the layer
+count $L$, the inhibition reach $\sigma$ and threshold $\tau$, the initiation
+probability $p_{\mathrm{init}}$, the stagger weight $\beta$, the claim
+probabilities $p_\uparrow$ and $p_\leftrightarrow$, and the inner height
+fraction $h_{\mathrm{in}}$. From the shells (\cref{sec:shells}): the scaled
+radius $a_k$ of each layer's mid-surface, which sets how long an arc of the
+shell is. Nothing else: the automaton does not see thicknesses, growth traits
+or the sepals.
 
-\subsection{Phase 1: initiation by inhibition}
-New petals (primordia) can only start on row 0, and only where existing
+\paragraph{Output.} One grid of owners per layer, and for each petal its
+layer, base angle, height cap and per-row shape (\cref{sec:ca-output}).
+
+\subsection{The grid}\label{sec:ca-grid}
+Each shell carries a grid of $\NA = 96$ azimuth cells by $\NP = 28$ polar
+rows, stored row by row. Cell $(r,s)$ has azimuth
+\[
+  \theta_s = \Bigl(s + \tfrac12\Bigr)\frac{2\pi}{\NA}, \qquad s = 0,\dots,\NA-1,
+\]
+so one cell is $3.75^\circ$ wide, and the grid wraps around in $s$: cell
+$\NA-1$ is the left neighbour of cell 0. Row 0 is the attachment ring at the
+bottom of the shell and rows run upward. When the sheet stage later places a
+row on the shell, row $r$ sits at polar angle
+\[
+  \phi_r = \phi_b + \frac{r + \frac12}{\NP}\,\bigl(\pi - \phi_g - \phi_b\bigr),
+\]
+evenly spaced from the attachment ring $\phi_b$ to just short of the top pole
+($\phi_g$ is the gap left at the top). The automaton itself never uses
+$\phi_r$: all its rules are written in cells. The only place real geometry
+enters is the inhibition distance on row 0, which is the arc length
+$a_k\,\Delta\theta$ around the shell at its widest. Each cell holds either
+\emph{empty} or the id of the petal that owns it. Ids count up across the
+whole flower, inner layer first.
+
+Shells are processed one at a time from the innermost ($k=0$) outward. Each
+shell runs two phases to completion, initiation then growth, before the next
+shell starts. The only thing a shell passes to the next one is the list of its
+primordia (for the stagger term below).
+
+\subsection{Phase 1: initiation by inhibition}\label{sec:ca-init}
+New petals (\emph{primordia}) can only start on row 0, and only where existing
 primordia leave room. A primordium $j$ at angle $\theta_j$ on layer $\ell_j$
 inhibits a cell on layer $k$ at angle $\theta$ by a Gaussian in arc length on
-the current shell,
+the current shell:
 \[
   I_k(\theta) = \sum_j w_{kj}\, \exp\!\left(-\frac{\bigl(a_k\,\Delta(\theta,\theta_j)\bigr)^2}{2\sigma^2}\right),
   \qquad
   w_{kj} = \begin{cases} 1 & \ell_j = k,\\ \beta & \ell_j = k-1,\\ 0 & \text{otherwise,}\end{cases}
 \]
-where $\Delta$ is the shortest angular distance. The layer below inhibits with
-weight $\beta$ (stagger), so a new layer's petals tend to sit in the gaps of the
-layer beneath, the way real petals interleave.
-
-Four passes are made over row 0. Each pass visits the empty cells in a freshly
-shuffled order, and a cell becomes a primordium when
+where $\Delta$ is the shortest angular distance,
 \[
-  I_k(\theta_s) < \tau \quad\text{and}\quad U < p_{\mathrm{init}}.
+  \Delta(\theta,\theta') = \min\bigl(\delta,\; 2\pi - \delta\bigr), \qquad \delta = |\theta-\theta'| \bmod 2\pi .
 \]
-Because inhibition is updated as soon as a primordium appears, the order of
-visits matters, and the shuffles are part of the plant's randomness. Petal count
-and spacing come out of $\sigma$, $\tau$, $p_{\mathrm{init}}$ and $\beta$ rather
-than being set directly.
+Only the current layer and the one directly below count; layers further down
+have no effect.
 
-\paragraph{Target height.} When a primordium is created it draws how many rows
-it may reach. With layer fraction $f_k = k/(L-1)$ (taken as 1 when $L=1$),
+\paragraph{The passes.} Four passes are made over row 0. Each pass shuffles
+the 96 cells into a fresh random order (Fisher--Yates) and visits them in that
+order. At each visited cell that is still empty, the inhibition is evaluated
+from all primordia that exist \emph{at that moment}, and the cell becomes a
+primordium when
 \[
-  H_j = \clamp\Bigl(\round\bigl(\NP\,(h_{\mathrm{in}} + (1-h_{\mathrm{in}}) f_k)\,\Unif[0.85, 1]\bigr),\; 4,\; \NP\Bigr),
+  I_k(\theta_s) < \tau \quad\text{and}\quad U < p_{\mathrm{init}},
+  \qquad U \sim \Unif[0,1).
 \]
-so inner petals are shorter and outer petals reach nearly to the top.
+A new primordium inhibits its neighbours immediately, so the next visited cell
+already feels it. This is random sequential placement: the order of visits
+matters, and the shuffles are part of the flower's randomness.
 
-\subsection{Phase 2: growth by competition}
-Petals then compete for the rest of the shell in synchronous sweeps: every
-sweep reads the grid as it was at the start of the sweep. An empty cell
-$(r,s)$ collects candidate owners from
+\paragraph{Why it spaces petals.} One primordium alone makes $I_k$ drop below
+$\tau$ only at arc distance
+\[
+  d^* = \sigma\sqrt{2\ln(1/\tau)}
+\]
+from it. With the peony ranges ($\sigma$ 0.45--0.75, $\tau$ 0.35--0.6),
+$d^*$ is 0.45--1.1 core radii. Since $\tau<1$, a primordium always inhibits
+its own cell, so two primordia never share a cell; and in practice two
+primordia on one layer are never much closer than $d^*$ (several neighbours
+add up, which pushes them a little further apart). The most petals a ring can
+hold is therefore about
+\[
+  N_k^{\max} \approx \frac{2\pi a_k}{d^*}.
+\]
+Random sequential placement does not reach this: on a line it jams at about
+three quarters of the densest packing (Rényi's parking constant, about
+0.748), and the coin $U < p_{\mathrm{init}}$ leaves some gaps unvisited for a
+pass. The four passes give a cell that lost its coin flip more chances: with
+$p_{\mathrm{init}} = 0.3$, an uninhibited cell stays empty through all four
+passes with probability $0.7^4 \approx 0.24$.
+
+\paragraph{Outer shells hold more petals.} Because the distance is arc length
+$a_k\Delta\theta$ and $a_k$ grows outward, the same $\sigma$ covers fewer cells
+on an outer shell. The inhibition is the same physical size on every shell,
+and an outer ring is longer, so $N_k^{\max}$ grows linearly with $a_k$. This is
+why petal counts tend to rise from the centre outward without any rule saying
+so.
+
+\paragraph{Stagger.} The layer below inhibits with weight $\beta$
+(\texttt{stagger}). Directly above a lower primordium the stagger term is
+$\beta$; halfway between two lower primordia it is small. So a new layer's
+petals tend to start in the gaps of the layer beneath, the way real petals
+interleave. A side effect is that layer counts \emph{alternate}. A dense
+layer leaves only narrow windows where $\beta \sum_j \exp(\dots)$ is below
+$\tau$, so the layer above it gets few petals; a sparse layer leaves wide
+windows, so the layer above gets many. The worked example shows a strong case
+(\cref{sec:ca-example}).
+
+\paragraph{Height cap.} When a primordium is created it immediately draws
+how many rows it may reach. With layer fraction $f_k = k/(L-1)$ (taken as 1
+when $L=1$),
+\[
+  H_j = \clamp\Bigl(\round\bigl(\NP\,(h_{\mathrm{in}} + (1-h_{\mathrm{in}}) f_k)\,\Unif[0.85, 1]\bigr),\; 4,\; \NP\Bigr).
+\]
+The innermost petals reach about $h_{\mathrm{in}}$ of the shell (0.75--0.9 of
+the rows for peony, less the random factor), the outermost reach nearly to the
+top. The petal will own rows $0,\dots,H_j-1$ at most.
+
+\paragraph{What decides the petal count.} Count and spacing come out of
+$\sigma$, $\tau$, $p_{\mathrm{init}}$, $\beta$ and the shell radii; no trait
+sets the number of petals directly. A larger $\sigma$ or a smaller $\tau$
+gives fewer, wider-spaced petals; a larger $\beta$ makes the interleaving (and
+the alternation) stronger; a smaller $p_{\mathrm{init}}$ leaves more gaps
+unfilled.
+
+\subsection{Phase 2: growth by competition}\label{sec:ca-growth}
+Petals then compete for the rest of the shell in \emph{synchronous sweeps}:
+every sweep reads a frozen copy of the grid as it was at the start of the
+sweep and writes into the live grid. So a cell claimed during a sweep cannot
+pass its owner on to its neighbours until the next sweep, and growth spreads
+at most one cell per sweep in each direction.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[scale=0.9, font=\footnotesize]
+\definecolor{petA}{HTML}{C8507A}\definecolor{petB}{HTML}{3F7FBF}
+\foreach \x in {0,1,2,3,4} \foreach \y in {0,1,2} \draw[black!30] (\x,\y) rectangle ++(1,1);
+\fill[petA!80] (2,0) rectangle ++(1,1); \node[white] at (2.5,0.5) {$A$};
+\fill[petA!80] (1,0) rectangle ++(1,1); \node[white] at (1.5,0.5) {$A$};
+\fill[petB!80] (1,1) rectangle ++(1,1); \node[white] at (1.5,1.5) {$B$};
+\fill[petB!80] (0,1) rectangle ++(1,1); \node[white] at (0.5,1.5) {$B$};
+\draw[very thick] (2,1) rectangle ++(1,1); \node at (2.5,1.5) {?};
+\draw[-{Stealth}, very thick] (2.5,0.7) -- (2.5,1.25);
+\draw[-{Stealth}, very thick] (1.7,1.5) -- (2.25,1.5);
+\node[fill=white, inner sep=1pt] at (3.5,0.5) {$p_\uparrow$};
+\node[above] at (2,2) {$p_\leftrightarrow$};
+\draw[black!50] (3.3,0.6) -- (2.6,0.95);
+\node[right, align=left, text width=6.2cm] at (5.4,1.5) {The empty cell $(r,s)$ (outlined) has two
+candidates: $A$ from below with $p_\uparrow$ and $B$ from the left with
+$p_\leftrightarrow$. Its right neighbour is empty and offers nothing. A
+candidate only counts if $r < H_j$ for its petal. Starting from a random
+candidate, each is tried once with its probability; the first success claims
+the cell.};
+\node[left] at (0,0.5) {row $r-1$};
+\node[left] at (0,1.5) {row $r$};
+\node[left] at (0,2.5) {row $r+1$};
+\end{tikzpicture}
+\caption{One cell update in the growth phase.}
+\label{fig:ca-rule}
+\end{figure}
+
+\paragraph{The cell rule.} During a sweep, every cell $(r,s)$ that was empty
+at the start of the sweep collects up to three candidate owners from the
+frozen grid (\cref{fig:ca-rule}):
 \begin{itemize}[leftmargin=*]
-\item the cell below it, $(r-1,s)$, with probability $p_\uparrow$;
-\item the cells beside it, $(r,s\pm1)$, each with probability $p_\leftrightarrow$;
+\item the owner of the cell below, $(r-1,s)$, with probability $p_\uparrow$
+  (row 0 has no cell below);
+\item the owners of the cells beside it, $(r,s-1)$ and $(r,s+1)$ (wrapping
+  around), each with probability $p_\leftrightarrow$.
 \end{itemize}
-keeping only petals that have not yet reached their height ($r < H_j$). Starting
-from a uniformly chosen candidate and going round in order, each candidate is
-tried with its probability, and the first success claims the cell. At most
-$3\NP$ sweeps run, stopping early once a sweep changes nothing after the first
-$\NP$.
+A candidate is kept only if the cell is below its height cap, $r < H_j$. The
+same petal may appear twice (below and beside), which simply gives it two
+tries. If there are $n \ge 1$ candidates, a start index is drawn uniformly
+from $\{0,\dots,n-1\}$ and the candidates are tried in cyclic order from there,
+each with one draw $U<p$; the first success claims the cell and the rest are
+skipped. If all fail, the cell stays empty for this sweep and is tried again
+in the next. Petals never claim cells from above and never take a cell that
+is already owned: ownership is permanent.
 
-Petal outlines therefore come from packing: a petal widens until it meets its
-neighbours, and a petal with more room ends up wider. Cells no petal reaches
-stay empty.
+\paragraph{Order of visits and stopping.} Within a sweep, cells are visited
+row by row from row 0 upward and left to right in $s$. Since the sweep reads
+the frozen grid, the visiting order does not change which petals compete for
+a cell, but it does fix which random numbers each cell draws. At most
+$3\NP = 84$ sweeps run. From the 30th sweep on, the first sweep that changes
+nothing ends the phase; before that, a quiet sweep does not stop it, which
+gives slow fronts time to move.
 
-\subsection{What the automaton hands on}
-For each petal, the automaton reports its layer, base angle, height and, for
-every row it occupies, the circular mean angle of its cells and their angular
-span $n_r \cdot 2\pi/\NA$. This per-row centre and span is all the sheet stage
-(\cref{sec:sheets}) uses.
+\paragraph{What growth does.} Starting from single cells on row 0, each petal
+grows into a mound: upward at roughly $p_\uparrow$ rows per sweep along its
+centre line, sideways at up to $p_\leftrightarrow$ cells per sweep on each
+side, and both directions feed each other (a cell claimed from below can
+then spread sideways on its own row). Fronts of two petals meet roughly
+halfway between their primordia; where they meet, the petal that got there
+first keeps the cell, so boundaries are ragged and random. A petal stops
+rising at its cap $H_j$, and once a row is closed between two neighbours it
+cannot widen there any further. Petal outlines therefore come from packing on
+the shell: a petal widens until it meets its neighbours, and a petal with
+more room ends up wider. A petal whose neighbours have lower caps can spill
+sideways over their tops, so taller petals can widen near their tips.
+
+\paragraph{What stays empty.} Cells above every reachable cap stay empty,
+and so can small pockets that all nearby petals reach only from above or
+whose candidates all failed when the phase stopped. On inner layers, where
+$H_j$ is smaller, a band at the top of the shell always stays empty.
+
+\paragraph{A lone petal wraps the shell.} Nothing limits how wide one petal
+may grow except its neighbours. A layer with a single primordium therefore
+lets that petal spread sideways around the whole ring, up to its cap, and its
+per-row span approaches $2\pi$. The worked example below contains one such
+layer.
+
+\subsection{The random stream}\label{sec:ca-stream}
+All draws come from one PCG32 generator (stream 1 of the flower seed), in this
+fixed order, layer by layer:
+\begin{enumerate}[leftmargin=*]
+\item per pass: one shuffle of the 96 row-0 cells; then, at each visited empty
+  cell whose inhibition is below $\tau$, one uniform for the coin; on success,
+  one uniform for the height factor $\Unif[0.85,1]$;
+\item per growth sweep, at each empty cell with at least one candidate: one
+  integer draw for the start index, then one uniform per candidate tried.
+\end{enumerate}
+Cells with inhibition at or above $\tau$, or with no candidates, draw nothing.
+Changing any rule above therefore shifts every later draw of the automaton,
+but never the draws of packing, growth or the channels, which use their own
+streams.
+
+\subsection{What the automaton hands on}\label{sec:ca-output}
+For each petal $j$, the automaton reports its layer, base angle $\theta_j$,
+height cap $H_j$, total number of cells, and for every row $r$ it occupies
+\[
+  c_r = \operatorname{atan2}\Bigl(\sum_{s \in S_r} \sin\theta_s,\; \sum_{s\in S_r}\cos\theta_s\Bigr),
+  \qquad
+  w_r = |S_r|\,\frac{2\pi}{\NA},
+\]
+where $S_r$ is the set of cells the petal owns on row $r$. So $c_r$ is the
+circular mean of those cells and $w_r$ their angular span; the span counts
+cells, so a row with a gap in it is treated as one block of the same total
+width. This per-row centre and span is all the sheet stage
+(\cref{sec:sheets}) uses: it ignores raggedness inside a row and lays a
+smooth sheet over the rows. A petal that reaches fewer than three rows gets
+no sheet.
 
 \begin{remark}
 This automaton only places petals. Where each petal grows during development
 is decided by a second automaton that runs on each petal's own grid
 (\cref{sec:growth}).
 \end{remark}
+
+\subsection{Worked example: seed 11, flower 0}\label{sec:ca-example}
+This example follows the automaton of the bud the viewer shows as its sample
+(plant seed 11, flower 0, peony), step by step. Every number and picture
+below was recorded from the model itself: a docs helper
+(\src{docs/tools/ca-trace}) re-runs the automaton with the same random stream,
+records each intermediate grid, and checks that its final grids equal those
+of \src{core/src/ca.rs}. The figures are generated from that record by
+\src{docs/tools/ca_figures.py}, so they can be regenerated if the rules
+change.
+
+\paragraph{The flower's traits.} This flower has $L = 10$ layers and
+\begin{center}\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+Symbol & Trait & Value \\
+\midrule
+$\sigma$ & \texttt{inhibit\_sigma} & 0.503 \\
+$\tau$ & \texttt{inhibit\_threshold} & 0.509 \\
+$p_{\mathrm{init}}$ & \texttt{init\_prob} & 0.229 \\
+$\beta$ & \texttt{stagger} & 0.588 \\
+$p_\uparrow$ & \texttt{up\_prob} & 0.663 \\
+$p_\leftrightarrow$ & \texttt{lateral\_prob} & 0.416 \\
+$h_{\mathrm{in}}$ & \texttt{inner\_height} & 0.785 \\
+\bottomrule
+\end{tabular}
+\end{center}
+so a lone primordium blocks an arc of $d^* = 0.503\sqrt{2\ln(1/0.509)} = 0.585$
+core radii on either side. The shell radii run from $a_0 = 0.927$ to $a_9 =
+1.766$, so $\sigma$ spans 8.3 cells on the innermost shell and 4.4 on the
+outermost, and the most petals a ring could hold rises from about 10 to about
+19.
+
+\paragraph{Initiation on layer 2.} Take layer 2 ($a_2 = 1.113$). Before any
+of its own primordia exist, the only inhibition is the stagger term from
+layer 1, which has a single petal at $332^\circ$: the grey area in
+\cref{fig:ca-inhibition}, peaking at $\beta = 0.59$ above that petal, so 89 of
+the 96 row-0 cells are below $\tau$. The first pass then places six
+primordia, in this order:
+\begin{center}\small
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+Order & Visit in pass 0 & Cell $s$ & $\theta_s$ & $I_2(\theta_s)$ when visited \\
+\midrule
+1 & 1st & 50 & $189^\circ$ & 0.000 \\
+2 & 4th & 36 & $137^\circ$ & 0.128 \\
+3 & 6th & 15 & $58^\circ$ & 0.012 \\
+4 & 15th & 75 & $283^\circ$ & 0.102 \\
+5 & 55th & 94 & $354^\circ$ & 0.475 \\
+6 & 78th & 65 & $246^\circ$ & 0.448 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The first four land quickly in open ground. The last two land in the only
+gaps left, with inhibition just under $\tau = 0.509$; primordium 5 sits right
+next to layer 1's petal, where the stagger term is still high but its own
+layer is empty. After pass 0 the inhibition (the red curve) is above $\tau$
+everywhere on the ring, so passes 1--3 place nothing. The heights drawn are
+21, 20, 20, 21, 21 and 22 rows.
+
+\begin{figure}[ht]
+\centering
+\input{figures/ca-inhibition}
+\caption{Row-0 inhibition on layer 2 of seed 11. Grey: the stagger term from
+layer 1's single petal, before layer 2 has any primordia. Red: the total after
+initiation. Dots: the six primordia, numbered in the order they appeared. The
+dashed line is the threshold $\tau$; a cell can only initiate below it.}
+\label{fig:ca-inhibition}
+\end{figure}
+
+\paragraph{Growth on layer 2.} \Cref{fig:ca-sweeps} shows the grid unrolled:
+azimuth left to right from $0^\circ$ to $360^\circ$, row 0 at the bottom, one
+colour per petal, primordia outlined. After 3 sweeps each petal is a short
+stub; after 8 sweeps they are mounds of 43 to 56 cells; by sweep 15 the mounds
+have met their neighbours near the base and keep rising; by sweep 25 almost
+every row up to the caps is closed. Sweep 31 is the last one that changes
+anything; sweep 32 changes nothing and, being past the 29th, ends the phase
+with 1991 of 2688 cells owned. The petal at $354^\circ$ wraps across the $0^\circ$ seam,
+which is why it appears at both edges. The resulting petals:
+\begin{center}\small
+\begin{tabular}{@{}cccccc@{}}
+\toprule
+Base angle & Cap $H_j$ & Cells & Rows reached & Span on row 0 & Widest row \\
+\midrule
+$58^\circ$ & 20 & 385 & 20 & $71^\circ$ & $79^\circ$ \\
+$137^\circ$ & 20 & 359 & 20 & $64^\circ$ & $71^\circ$ \\
+$189^\circ$ & 21 & 312 & 21 & $60^\circ$ & $64^\circ$ \\
+$246^\circ$ & 22 & 258 & 22 & $41^\circ$ & $52^\circ$ \\
+$283^\circ$ & 21 & 310 & 21 & $56^\circ$ & $64^\circ$ \\
+$354^\circ$ & 21 & 367 & 21 & $68^\circ$ & $79^\circ$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The petal at $246^\circ$ is the narrowest because it started last, in the
+smallest gap; the petal at $58^\circ$ is the widest because it had the most
+room. Every petal reached its cap, so their heights are exactly the drawn
+$H_j$.
+
+\begin{figure}[ht]
+\centering
+\input{figures/ca-sweeps}
+\caption{The growth phase on layer 2 of seed 11, at six moments. Each panel is
+the $96\times28$ grid unrolled (azimuth across, row 0 at the bottom); colours
+are petals, outlined cells are the primordia, grey is empty.}
+\label{fig:ca-sweeps}
+\end{figure}
+
+\paragraph{All ten layers.} Running the same two phases on every shell gives
+\begin{center}\small
+\begin{tabular}{@{}cccccc@{}}
+\toprule
+Layer & $a_k$ & Row-0 cells free of stagger & Petals & Sweeps & Cells owned \\
+\midrule
+0 & 0.927 & 96 & 6 & 34 & 73\% \\
+1 & 1.020 & 8 & 1 & 84 & 73\% \\
+2 & 1.113 & 89 & 6 & 32 & 74\% \\
+3 & 1.207 & 26 & 3 & 80 & 82\% \\
+4 & 1.300 & 75 & 5 & 43 & 84\% \\
+5 & 1.393 & 58 & 6 & 68 & 88\% \\
+6 & 1.486 & 49 & 5 & 55 & 89\% \\
+7 & 1.580 & 69 & 7 & 46 & 88\% \\
+8 & 1.673 & 38 & 4 & 58 & 90\% \\
+9 & 1.766 & 76 & 8 & 55 & 98\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+for 51 petals in all. ``Row-0 cells free of stagger'' counts the cells where
+the layer below alone leaves the inhibition under $\tau$, before the layer's
+own primordia appear. Three effects from the rules above are visible.
+\begin{itemize}[leftmargin=*]
+\item \emph{Alternation.} Layer 0's six petals are close to the densest
+  spacing for that shell, so their stagger term stays above $\tau$ over all
+  but 8 cells of layer 1. Layer 1 gets a single petal. That leaves layer 2
+  almost unconstrained (89 free cells), and it gets six again. The counts
+  6, 1, 6, 3, 5, 6, 5, 7, 4, 8 follow the free-cell column closely.
+\item \emph{More petals outward.} Under the alternation the counts rise, from
+  about 4 on the inner layers to about 6 on the outer ones, because the outer
+  rings are longer for the same inhibition reach. The owned fraction rises
+  too, from 73\% to 98\%, because the caps $H_j$ rise from about 20 rows to
+  about 27.
+\item \emph{Interleaving.} In \cref{fig:ca-rings}, each layer's primordia tend
+  to sit between those of the layer inside it.
+\end{itemize}
+Layer 1 is the lone-petal case: its one petal spreads around the whole shell
+(\cref{fig:ca-layers}), with a row-0 span of $285^\circ$ and $360^\circ$
+higher up. Layers with few petals also take longest to settle, because one or two
+fronts have to cover the whole ring: layer 3 needs 80 sweeps, and layer 1 is
+still growing when the limit of 84 stops it.
+
+\begin{figure}[ht]
+\centering
+\input{figures/ca-rings}
+\caption{Where the primordia of seed 11 start, one ring per layer seen from
+above (layer 0 innermost; ring spacing is schematic). Each layer's
+primordia tend to fall in the gaps of the layer inside it.}
+\label{fig:ca-rings}
+\end{figure}
+
+\begin{figure}[ht]
+\centering
+\input{figures/ca-layers}
+\caption{The final grid of every layer of seed 11, unrolled as in
+\cref{fig:ca-sweeps}. Colours only tell neighbouring petals apart within a
+layer.}
+\label{fig:ca-layers}
+\end{figure}
+
+\paragraph{Regenerating the example.} From \texttt{docs/tools/ca-trace},
+\texttt{cargo run --release -- 11 0 > trace.json} records the run (it
+stops with an error if its grids ever differ from \src{core/src/ca.rs}); then
+\texttt{python3 ../ca\_figures.py trace.json ../../figures} rewrites the four
+figure files. The tables above are read off the same record.
 
 \subsection{Relation to the Python prototype}
 The 2D prototype in \src{prototype-python/} ran the same idea on one flat polar

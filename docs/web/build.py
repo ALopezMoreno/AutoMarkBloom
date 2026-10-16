@@ -11,9 +11,11 @@ def box(m):
     return f'<div class="stage"><div><span class="k">Status</span> {st}</div><div><span class="k">Source</span> {src}</div></div>'
 body = re.sub(r'<p>STAGEOPEN\s+(.*?)\s+SOURCES\s+(.*?)\s+STAGECLOSE</p>', box, body, flags=re.S)
 assert 'STAGEOPEN' not in body and 'STAGECLOSE' not in body
-for i in range(2):
+import glob
+for i in range(len(glob.glob('fig*.svg'))):
     svg = base64.b64encode(open(f'fig{i}.svg','rb').read()).decode()
     body = body.replace(f'<p>FIGURE{i}PLACEHOLDER</p>', f'<div class="figpanel"><img src="data:image/svg+xml;base64,{svg}" alt=""></div>')
+assert 'PLACEHOLDER' not in body
 body = re.sub(r'<table>', '<div class="tablewrap"><table>', body); body = body.replace('</table>', '</table></div>')
 # TOC from h1
 toc = []
