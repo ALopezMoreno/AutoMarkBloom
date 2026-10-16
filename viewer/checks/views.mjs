@@ -15,7 +15,7 @@ const set = (id, v) => page.evaluate(([id, v]) => {
   e.dispatchEvent(new Event(e.tagName === "SELECT" || e.type === "checkbox" ? "change" : "input"));
 }, [id, v]);
 const shot = async (name) => { await page.waitForTimeout(500); await page.screenshot({ path: `${out}/${name}.png` }); };
-await set("colour", "layer"); await shot("v_layers");
+await set("colour", "schematic"); await shot("v_layers"); await page.evaluate(() => window.automark.setTime(0)); await set("section","vertical"); await shot("v_schem_section"); await set("section","off");
 await set("explode", "0.6"); await shot("v_exploded");
 await set("explode", "0"); await set("peel", "4"); await shot("v_peel");
 await set("peel", "99"); await set("section", "vertical"); await shot("v_vertical");

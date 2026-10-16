@@ -71,9 +71,9 @@ const el = (name: string, attrs: Record<string, string | number>) => {
 };
 
 /** Draws the section schematic into `svg`. */
-export function drawSchematic(svg: SVGSVGElement, doc: FlowerDoc, samples: PetalSample[], sec: Section, visibleLayers: number) {
+export function drawSchematic(svg: SVGSVGElement, doc: FlowerDoc, samples: PetalSample[], sec: Section, visibleLayers: number, envelope: number) {
   svg.replaceChildren();
-  const { aspect, core, envelope, radius } = doc.shells;
+  const { aspect, core, radius } = doc.shells;
   const layers = [...new Set(doc.petals.map((p) => p.layer))].sort((a, b) => a - b);
   const L = layers.length;
   // Petals can sit a little outside the nominal envelope after packing.
