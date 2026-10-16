@@ -60,6 +60,21 @@ pub struct Species {
     pub sepal_stiffness: [f64; 2],
     /// Sepal rest-size growth over the whole bud stage, as a fraction.
     pub sepal_growth: [f64; 2],
+    /// Correlation length of the growth automaton's noise, in petal grid
+    /// nodes: neighbouring cells tend to switch on and off together, so
+    /// growth comes in coherent patches. 0 gives independent coin flips.
+    pub growth_correlation: [f64; 2],
+    /// How much a cell's noise carries over from one stage to the next
+    /// (0 = fresh each stage, near 1 = patches keep growing for many stages).
+    pub growth_persistence: [f64; 2],
+    /// Split of growth between length (base to tip) and width. Positive
+    /// grows length more, giving waves across the petal; negative grows
+    /// width more, giving pleats fanning from base to tip.
+    pub growth_anisotropy: [f64; 2],
+    /// Resistance to sharp single-cell kinks, as a multiple of
+    /// `petal_stiffness`. High values give smooth, broad folds (peony);
+    /// 0 lets petals crinkle at the finest scale (papery petals, poppy).
+    pub zigzag_bending: [f64; 2],
 
     // Petal latents handed to the opening stage (plant-level means).
     /// Overall size potential of the plant's petals.
@@ -135,7 +150,7 @@ impl Species {
             phi_base: [0.45, 0.45],
             phi_top_gap: [0.10, 0.10],
             growth_stages: [10, 14],
-            growth_rate: [0.05, 0.08],
+            growth_rate: [0.1, 0.16],
             quiet_growth: [0.15, 0.4],
             edge_boost: [0.6, 1.4],
             activity_base: [0.15, 0.3],
@@ -145,6 +160,10 @@ impl Species {
             layer_freedom: [1.5, 3.0],
             sepal_stiffness: [5.0, 25.0],
             sepal_growth: [0.04, 0.12],
+            growth_correlation: [1.0, 2.0],
+            growth_persistence: [0.5, 0.8],
+            growth_anisotropy: [-0.25, 0.15],
+            zigzag_bending: [3.0, 5.0],
             size_potential: [0.85, 1.15],
             cup_inner: [0.6, 0.9],
             cup_outer: [0.1, 0.35],

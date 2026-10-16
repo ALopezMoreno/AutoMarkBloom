@@ -91,14 +91,20 @@ fn json_matches_shared_format() {
         let mid: Vec<f64> = p["mid"].as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).collect();
         assert_eq!(mid.len(), nu * nv * 3);
         assert_eq!(p["thick"].as_array().unwrap().len(), nu * nv);
-        // Outer face: d/du x d/dv at the petal's middle points away from the axis.
+        // Outer face: d/du x d/dv points away from the bud centre. Checked
+        // over the whole petal, since a fold can locally overturn it.
         let at = |a: usize, c: usize| [mid[(a * nv + c) * 3], mid[(a * nv + c) * 3 + 1], mid[(a * nv + c) * 3 + 2]];
-        let (a, c) = (nu / 2, nv / 2);
-        let (p0, pu, pv) = (at(a, c), at(a + 1, c), at(a, c + 1));
-        let du = [pu[0] - p0[0], pu[1] - p0[1], pu[2] - p0[2]];
-        let dv = [pv[0] - p0[0], pv[1] - p0[1], pv[2] - p0[2]];
-        let nrm = [du[1] * dv[2] - du[2] * dv[1], du[2] * dv[0] - du[0] * dv[2], du[0] * dv[1] - du[1] * dv[0]];
-        assert!(nrm[0] * p0[0] + nrm[1] * p0[1] > 0.0, "petal normal faces inward");
+        let mut outward = 0.0;
+        for a in 0..nu - 1 {
+            for c in 0..nv - 1 {
+                let (p0, pu, pv) = (at(a, c), at(a + 1, c), at(a, c + 1));
+                let du = [pu[0] - p0[0], pu[1] - p0[1], pu[2] - p0[2]];
+                let dv = [pv[0] - p0[0], pv[1] - p0[1], pv[2] - p0[2]];
+                let nrm = [du[1] * dv[2] - du[2] * dv[1], du[2] * dv[0] - du[0] * dv[2], du[0] * dv[1] - du[1] * dv[0]];
+                outward += nrm[0] * p0[0] + nrm[1] * p0[1] + nrm[2] * p0[2];
+            }
+        }
+        assert!(outward > 0.0, "petal normal faces inward");
     }
 }
 

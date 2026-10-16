@@ -71,3 +71,20 @@ Readers must ignore fields they don't know.
   the current pose, or every frame as morph targets with an "opening" clip.
 - Offers every declared channel under "Colour by": scalars on a ramp over `range` (or the observed
   min/max), categorical channels with their `labels`, and dims-3 channels as RGB in [0, 1].
+
+## Compact files (.amb)
+
+A flower document can also be stored as a compact binary file. The viewer reads either form, and `scripts/to_amb.py` converts JSON to `.amb`. The seed 11 run (38 steps, 55 petals, 37×21 grid) is 54 MB as JSON and 5.2 MB as `.amb`, and the browser decodes it in about 0.2 s.
+
+Layout, little-endian:
+
+| Bytes | Content |
+|---|---|
+| 0–3 | `AMB1` |
+| 4–7 | header length H (u32) |
+| 8 … 8+H | header: the flower document as UTF-8 JSON, with every frame petal's `mid` and `thick` left out, plus `"encoding": {"codec": "amb1", "mid_step": s, "thick_step": s2}` |
+| rest | zlib (RFC 1950) stream holding two planes: first all `mid` values, then all `thick` values |
+
+Each plane is ordered frame, petal, point (and xyz for `mid`). A value is stored as the int16 `round(value / step)` minus the same value in the previous frame (frame 0 holds the value itself), with wrap-around mod 2^16. The plane's bytes are shuffled: all low bytes first, then all high bytes. Readers undo this and multiply by the step. The writer picks the steps so that the largest value maps to 32000, so `mid` is accurate to about 1e-4 core radii, which is far below a petal's thickness (about 0.03).
+
+A `.amb.txt` file is the same bytes in base64, for hosts that only serve text.
