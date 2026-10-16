@@ -34,7 +34,7 @@ default and still more relaxed than it was.
 | **L-BFGS** instead of preconditioned FIRE | Possibly 2–5x fewer iterations | Yes | It learns the stiff and soft directions from recent gradients, so it also helps the slow whole-petal bending modes that a per-node mass cannot reach. Caveats: contact switching makes the energy only C1, so it needs a robust line search (with a fallback to a FIRE step) and a memory reset when the contact list is rebuilt. Each line-search step costs extra energy evaluations. Worth a prototype once the stage loop is settled, and best measured on energy reached per energy evaluation, as above. |
 | **Convergence-based stopping**: stop a relaxation when energy over the last 20 iterations falls by less than a tolerance | Small with plain FIRE; worth re-measuring now that stages actually settle | Yes | Cheap to add. |
 | **Coarse-to-fine**: early stages on a coarser petal grid, refined for the late crumpling | 2–3x | Yes | More code: grid transfer of positions, springs and growth state. |
-| **Parallel contact search** (threads) | 2–4x natively, less in wasm | Not if done carefully | Determinism rule: no threads in anything that sums floats. Candidate finding can run in parallel if its result is sorted. Energy and gradient sums must stay in a fixed order. |
+| **Parallel contact search** (threads) | Done natively, see below | No | |
 
 Any change to canonical output needs the golden digests re-blessed
 (`BLESS=1 cargo test --release -p automark-checks`).
@@ -109,6 +109,38 @@ Seed 11 flower 0, 24 frames, measured natively:
   triangles whose plane is beyond reach, and merges new pairs into the kept ones instead of
   re-sorting. Output is byte-identical (checked on seeds 11 and 2027). Seed 11 from seed to
   open went from 35 s to 29 s.
+
+## Half the relaxation steps (changes output)
+
+The bud now relaxes 30 iterations per stage and 75 to settle (was 60 and 150). Final energy is
+about 15% higher (less relaxed), and overlaps and band excess are unchanged. The crumpled
+character is kept (compared on seeds 11 and 2027). The preview preset went from 25/50 to 12/30
+so it stays about twice as fast as the default. Golden digests re-blessed.
+
+| Bud, one thread | 60 / 150 | 30 / 75 |
+|---|---|---|
+| seed 11 | 7.5 s, E 18094, overlap 0.60 t | 4.6 s, E 21245, overlap 0.61 t |
+| seed 2027 | 5.5 s, E 22476, overlap 0.63 t | 2.6 s, E 25000, overlap 0.63 t |
+| seed 7 | 4.3 s, E 8748, overlap 0.78 t | 2.2 s, E 9492, overlap 0.75 t |
+
+An L-BFGS solver (preconditioned with the same per-node masses, backtracking line search) was
+also tried. With the same number of energy evaluations it reached about 15–25% lower energy,
+but its longer steps doubled the contact rebuilds, so per second it was no better than FIRE.
+
+## Deterministic threads (output unchanged)
+
+Contact search (bud and opening) and contact detection (which pairs touch, in both energies)
+run on every core natively (`core/src/par.rs`). Each call cuts its work into 64 chunks fixed
+by the work's size, threads take chunks as they free up, and the results are joined in chunk
+order. Gradient and energy sums then run in one thread in pair order, so output is the same
+bits on any core count (checked: seed 11 and 2027 flower JSON with frames, from seed to open,
+identical to main with 1 and 4 threads; golden digests unchanged). `AUTOMARK_THREADS` sets
+the thread count; WebAssembly runs the chunks one after another.
+
+| Seed to open, 4-core cloud machine | before | after |
+|---|---|---|
+| seed 11 | 18.2 s (bud 7.2 s) | 11.4 s (bud 5.1 s) |
+| seed 2027 | 10.5 s | 8.1 s |
 
 ## Coarse-to-fine bud (changes output)
 

@@ -12,6 +12,7 @@
 
 use crate::energy::closest_on_triangle;
 use crate::math;
+use crate::par;
 
 /// A point on a petal: four nodes and their bilinear weights.
 #[derive(Clone, Copy, Debug)]
@@ -158,60 +159,66 @@ impl Contacts {
             let b = (key(hi, k).max(0.0) as usize).min(n[k] - 1);
             a..=b
         };
-        let mut out = Vec::new();
-        for (ti, &[a, b, c]) in self.tris.iter().enumerate() {
-            let owner = self.tri_petal[ti];
-            let mut lo = [f64::MAX; 3];
-            let mut hi = [f64::MIN; 3];
-            for v in [a, b, c] {
-                for k in 0..3 {
-                    lo[k] = lo[k].min(x[v][k] - reach);
-                    hi[k] = hi[k].max(x[v][k] + reach);
+        // Triangles go to threads in fixed chunks, joined in order and then
+        // sorted, so the list is the same on any number of cores.
+        let mut out = par::flat_map_chunks(self.tris.len(), |tris| {
+            let mut out = Vec::new();
+            for ti in tris {
+                let [a, b, c] = self.tris[ti];
+                let owner = self.tri_petal[ti];
+                let mut lo = [f64::MAX; 3];
+                let mut hi = [f64::MIN; 3];
+                for v in [a, b, c] {
+                    for k in 0..3 {
+                        lo[k] = lo[k].min(x[v][k] - reach);
+                        hi[k] = hi[k].max(x[v][k] + reach);
+                    }
                 }
-            }
-            if (0..3).any(|k| hi[k] < lo0[k] || lo[k] > hi0[k]) {
-                continue;
-            }
-            let (start, order, spts, spet) = if dirty[owner] { &full } else { &only_dirty };
-            let mt = moved[a].max(moved[b]).max(moved[c]);
-            // Distance to the triangle is at least distance to its plane.
-            let (e1, e2) = (sub(x[b], x[a]), sub(x[c], x[a]));
-            let nrm = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
-            let nl = norm(nrm);
-            let plane = nl > 1e-12 * (norm(e1) * norm(e2)).max(1e-300);
-            let nh = if plane { [nrm[0] / nl, nrm[1] / nl, nrm[2] / nl] } else { [0.0; 3] };
-            let far = reach + 1e-9 * (1.0 + reach);
-            for gz in range(lo[2], hi[2], 2) {
-                for gy in range(lo[1], hi[1], 1) {
-                    let row = (gz * n[1] + gy) * n[0];
-                    let xs = range(lo[0], hi[0], 0);
-                    for j in start[row + xs.start()]..start[row + xs.end() + 1] {
-                        let sp = spet[j];
-                        if sp == owner {
-                            continue;
-                        }
-                        let p = spts[j];
-                        if !(0..3).all(|k| p[k] >= lo[k] && p[k] <= hi[k]) {
-                            continue;
-                        }
-                        if plane {
-                            let ap = sub(p, x[a]);
-                            if (ap[0] * nh[0] + ap[1] * nh[1] + ap[2] * nh[2]).abs() > far {
+                if (0..3).any(|k| hi[k] < lo0[k] || lo[k] > hi0[k]) {
+                    continue;
+                }
+                let (start, order, spts, spet) = if dirty[owner] { &full } else { &only_dirty };
+                let mt = moved[a].max(moved[b]).max(moved[c]);
+                // Distance to the triangle is at least distance to its plane.
+                let (e1, e2) = (sub(x[b], x[a]), sub(x[c], x[a]));
+                let nrm = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+                let nl = norm(nrm);
+                let plane = nl > 1e-12 * (norm(e1) * norm(e2)).max(1e-300);
+                let nh = if plane { [nrm[0] / nl, nrm[1] / nl, nrm[2] / nl] } else { [0.0; 3] };
+                let far = reach + 1e-9 * (1.0 + reach);
+                for gz in range(lo[2], hi[2], 2) {
+                    for gy in range(lo[1], hi[1], 1) {
+                        let row = (gz * n[1] + gy) * n[0];
+                        let xs = range(lo[0], hi[0], 0);
+                        for j in start[row + xs.start()]..start[row + xs.end() + 1] {
+                            let sp = spet[j];
+                            if sp == owner {
                                 continue;
                             }
-                        }
-                        let w = closest_on_triangle(p, x[a], x[b], x[c]);
-                        let q = [0, 1, 2].map(|k| w[0] * x[a][k] + w[1] * x[b][k] + w[2] * x[c][k]);
-                        let d = norm(sub(p, q));
-                        if d < reach {
-                            let i = order[j];
-                            let ms = self.samples[i].nodes.iter().map(|&v| moved[v]).fold(0.0, f64::max);
-                            out.push((i, ti, d - ms - mt));
+                            let p = spts[j];
+                            if !(0..3).all(|k| p[k] >= lo[k] && p[k] <= hi[k]) {
+                                continue;
+                            }
+                            if plane {
+                                let ap = sub(p, x[a]);
+                                if (ap[0] * nh[0] + ap[1] * nh[1] + ap[2] * nh[2]).abs() > far {
+                                    continue;
+                                }
+                            }
+                            let w = closest_on_triangle(p, x[a], x[b], x[c]);
+                            let q = [0, 1, 2].map(|k| w[0] * x[a][k] + w[1] * x[b][k] + w[2] * x[c][k]);
+                            let d = norm(sub(p, q));
+                            if d < reach {
+                                let i = order[j];
+                                let ms = self.samples[i].nodes.iter().map(|&v| moved[v]).fold(0.0, f64::max);
+                                out.push((i, ti, d - ms - mt));
+                            }
                         }
                     }
                 }
             }
-        }
+            out
+        });
         out.sort_unstable_by_key(|&(si, ti, _)| (si, ti));
         // Kept pairs are already sorted, and never coincide with new ones
         // (a new pair has a dirty petal, a kept one has none): merge.
@@ -244,27 +251,37 @@ impl Contacts {
     /// distance cannot be touching and is skipped without the exact test.
     pub fn energy(&self, x: &[[f64; 3]], thick: &[f64], k: f64, grad: &mut [[f64; 3]], anchor: &[[f64; 3]]) -> f64 {
         let moved: Vec<f64> = x.iter().zip(anchor).map(|(p, q)| norm(sub(*p, *q))).collect();
+        // Touching pairs are found in fixed chunks across threads and joined
+        // in pair order; the sums below then run in that order in one thread,
+        // so the result is the same on any number of cores.
+        let touching = par::flat_map_chunks(self.cands.len(), |range| {
+            let mut out = Vec::new();
+            for (&(si, ti), &bound) in self.cands[range.clone()].iter().zip(&self.bound[range]) {
+                let s = &self.samples[si];
+                let [a, b, c] = self.tris[ti];
+                let tq = (thick[a] + thick[b] + thick[c]) / 3.0;
+                let dmin = 0.5 * (self.thick_at(s, thick) + tq);
+                let ms = s.nodes.iter().map(|&v| moved[v]).fold(0.0, f64::max);
+                let mt = moved[a].max(moved[b]).max(moved[c]);
+                if bound - ms - mt - 1e-9 >= dmin {
+                    continue;
+                }
+                let p = s.at(x);
+                let w = closest_on_triangle(p, x[a], x[b], x[c]);
+                let q = [0, 1, 2].map(|m| w[0] * x[a][m] + w[1] * x[b][m] + w[2] * x[c][m]);
+                let d = norm(sub(p, q));
+                if d < dmin {
+                    out.push((si, ti, w, sub(p, q), d, dmin));
+                }
+            }
+            out
+        });
         let mut e = 0.0;
-        for (&(si, ti), &bound) in self.cands.iter().zip(&self.bound) {
+        for (si, ti, w, n, d, dmin) in touching {
             let s = &self.samples[si];
             let [a, b, c] = self.tris[ti];
-            let tq = (thick[a] + thick[b] + thick[c]) / 3.0;
-            let dmin = 0.5 * (self.thick_at(s, thick) + tq);
-            let ms = s.nodes.iter().map(|&v| moved[v]).fold(0.0, f64::max);
-            let mt = moved[a].max(moved[b]).max(moved[c]);
-            if bound - ms - mt - 1e-9 >= dmin {
-                continue;
-            }
-            let p = s.at(x);
-            let w = closest_on_triangle(p, x[a], x[b], x[c]);
-            let q = [0, 1, 2].map(|m| w[0] * x[a][m] + w[1] * x[b][m] + w[2] * x[c][m]);
-            let d = norm(sub(p, q));
-            if d >= dmin {
-                continue;
-            }
             let ex = dmin - d;
             e += 0.5 * k * ex * ex;
-            let n = sub(p, q);
             let f = -k * ex / d.max(1e-12);
             for m in 0..4 {
                 for c3 in 0..3 {
