@@ -4,6 +4,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { validate, type FlowerDoc } from "./format";
 import { FlowerMesh } from "./mesh";
 import { stubFlower } from "./stub";
+import { coreAvailable, growBud } from "./core";
 import { download, exportAnimated, exportStatic } from "./export";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -62,13 +63,17 @@ function show(doc: FlowerDoc, label: string) {
   $("err").textContent = "";
   frame(flower);
   setTime(Math.min(time, flower.frameCount - 1));
+  const still = flower.frameCount < 2;
+  for (const id of ["time", "play", "prev", "next", "glbAnim"]) $<HTMLButtonElement>(id).disabled = still;
 }
 
 /** Point the camera so the fully opened flower fits the view. */
 function frame(fm: FlowerMesh) {
   fm.setTime(fm.frameCount - 1);
   const sphere = fm.geometry.boundingSphere!.clone();
-  const dist = sphere.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
+  const halfV = THREE.MathUtils.degToRad(camera.fov / 2);
+  const halfH = Math.atan(Math.tan(halfV) * camera.aspect);
+  const dist = sphere.radius / Math.sin(Math.min(halfV, halfH)) * 1.2;
   const dir = new THREE.Vector3(0.62, 0.55, 0.75).normalize();
   controls.target.copy(sphere.center);
   camera.position.copy(sphere.center).addScaledVector(dir, dist);
@@ -86,8 +91,32 @@ function setTime(t: number) {
   $("frame").textContent = `step ${Math.round(time)} / ${flower.frameCount - 1}`;
 }
 
-function loadSeed(seed: number) {
-  show(stubFlower(seed), `Stub flower, seed ${seed}`);
+const sourceSel = $<HTMLSelectElement>("source");
+if (coreAvailable) {
+  sourceSel.options[0].hidden = false;
+  sourceSel.value = "core";
+}
+
+let request = 0;
+const U64_MAX = 18446744073709551615n;
+
+/** `seed` is a decimal string: core seeds are full u64s, beyond JS number precision. */
+async function loadSeed(seed: string) {
+  seed = seed.trim() || "0";
+  if (!/^\d+$/.test(seed) || BigInt(seed) > U64_MAX) {
+    $("err").textContent = "Seed must be a whole number from 0 to 18446744073709551615.";
+    return;
+  }
+  if (sourceSel.value !== "core") return show(stubFlower(Number(seed) | 0), `Stub flower, seed ${seed}`);
+  const mine = ++request;
+  $("info").textContent = `Growing bud ${seed}…`;
+  try {
+    const { json, ms } = await growBud(seed);
+    if (mine !== request) return; // a newer seed was asked for meanwhile
+    show(validate(JSON.parse(json)), `Core bud, seed ${seed} (${Math.round(ms)} ms)`);
+  } catch (e) {
+    if (mine === request) $("err").textContent = String((e as Error).message ?? e);
+  }
 }
 
 async function loadJsonText(text: string, name: string) {
@@ -99,11 +128,22 @@ async function loadJsonText(text: string, name: string) {
 }
 
 // UI
-$("seed").addEventListener("change", () => loadSeed(Number($<HTMLInputElement>("seed").value) | 0));
+$("source").addEventListener("change", async (e) => {
+  const v = (e.target as HTMLSelectElement).value;
+  const seeded = v === "stub" || v === "core";
+  $("seedRow").style.display = seeded ? "" : "none";
+  if (seeded) return loadSeed($<HTMLInputElement>("seed").value);
+  try {
+    loadJsonText(await (await fetch(v)).text(), sourceSel.selectedOptions[0].text);
+  } catch (err) {
+    $("err").textContent = String(err);
+  }
+});
+$("seed").addEventListener("change", () => loadSeed($<HTMLInputElement>("seed").value));
 $("reroll").addEventListener("click", () => {
   const s = Math.floor(Math.random() * 1e6);
   $<HTMLInputElement>("seed").value = String(s);
-  loadSeed(s);
+  loadSeed(String(s));
 });
 $("time").addEventListener("input", (e) => {
   playing = false;
@@ -143,12 +183,18 @@ addEventListener("drop", async (e) => {
   if (f) loadJsonText(await f.text(), f.name);
 });
 
+// The canvas fills #app, which is the whole window on desktop and the space
+// under the control bar on phones.
+const narrow = matchMedia("(max-width: 700px)");
+if (narrow.matches) $<HTMLDetailsElement>("more").open = false;
 function resize() {
-  renderer.setSize(innerWidth, innerHeight);
-  camera.aspect = innerWidth / innerHeight;
+  const el = $("app");
+  const w = el.clientWidth || innerWidth, h = el.clientHeight || innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize);
+new ResizeObserver(resize).observe($("app"));
 resize();
 
 const clock = new THREE.Clock();
@@ -169,10 +215,12 @@ renderer.setAnimationLoop(() => {
 const q = new URLSearchParams(location.search);
 const src = q.get("src");
 if (src) {
+  const opt = [...$<HTMLSelectElement>("source").options].find((o) => o.value === src);
+  if (opt) { $<HTMLSelectElement>("source").value = src; $("seedRow").style.display = "none"; }
   fetch(src).then((r) => r.text()).then((t) => loadJsonText(t, src)).catch((e) => ($("err").textContent = String(e)));
 } else {
-  const seed = Number(q.get("seed") ?? 7) | 0;
-  $<HTMLInputElement>("seed").value = String(seed);
+  const seed = q.get("seed") ?? "7";
+  $<HTMLInputElement>("seed").value = seed;
   loadSeed(seed);
 }
 const loaded = flower as FlowerMesh | null;

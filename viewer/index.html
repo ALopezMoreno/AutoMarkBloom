@@ -11,7 +11,9 @@
   :root[data-theme="dark"] { --bg: #17131a; --panel: rgba(34,28,36,0.88); --text: #f1e8ec; --muted: #a8979f; --accent: #ef8fb0; --line: #3a2f3c; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+  body { display: flex; flex-direction: column; height: 100dvh; }
   #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
   #panel { position: fixed; top: 12px; left: 12px; width: min(300px, calc(100vw - 24px)); background: var(--panel); backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
   h1 { font-size: 15px; margin: 0; letter-spacing: .02em; }
@@ -24,6 +26,20 @@
   input[type=range] { width: 100%; accent-color: var(--accent); }
   #info { color: var(--muted); font-size: 12px; }
   #err { color: #c0392b; font-size: 12px; white-space: pre-wrap; }
+  details > summary { cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "▸ "; }
+  details[open] > summary::before { content: "▾ "; }
+  details[open] > .more { display: grid; gap: 10px; margin-top: 10px; }
+  /* Phones: controls become a bar on top and the flower gets the rest of the screen. */
+  @media (max-width: 700px) {
+    #app { position: relative; inset: auto; flex: 1; min-height: 0; }
+    #panel { position: static; order: -1; width: auto; margin: 0; border-radius: 0; border-width: 0 0 1px; padding: 8px 16px; gap: 6px; backdrop-filter: none; }
+    h1 { display: none; }
+    #info { display: none; }
+    button, input[type=number], select { padding: 6px 8px; }
+  }
+  button:disabled, input:disabled { opacity: .45; cursor: default; }
   #drop { position: fixed; inset: 0; display: none; place-items: center; background: rgba(178,69,108,.18); font-size: 18px; pointer-events: none; }
   body.dragging #drop { display: grid; }
 </style>
@@ -32,16 +48,19 @@
 <div id="app"></div>
 <div id="panel">
   <h1>AutoMarkBloom</h1>
-  <div class="row"><label for="seed">Seed</label><input id="seed" type="number" value="7" min="0" /><button id="reroll" title="Random seed">Random</button></div>
+  <div class="row"><label for="source">Flower</label><select id="source"><option value="core" hidden>Rust core (any seed)</option><option value="stub">Stub (any seed)</option><option value="samples/bud_11.json">Core bud, seed 11</option><option value="samples/bud_2027.json">Core bud, seed 2027</option></select></div>
+  <div class="row" id="seedRow"><label for="seed">Seed</label><input id="seed" type="number" value="7" min="0" /><button id="reroll" title="Random seed">Random</button></div>
   <div>
     <div class="row"><label>Opening</label><span id="frame" style="text-align:right;color:var(--muted);font-size:12px"></span></div>
     <input id="time" type="range" min="0" max="1" step="0.001" value="0" />
   </div>
   <div class="row"><button id="play" class="primary">Play</button><button id="prev">◀ Step</button><button id="next">Step ▶</button></div>
+  <details id="more" open><summary>More options</summary><div class="more">
   <div class="row"><label for="speed">Speed</label><select id="speed"><option value="4">4 steps/s</option><option value="12" selected>12 steps/s</option><option value="24">24 steps/s</option></select></div>
   <div class="row"><label><input id="shells" type="checkbox" /> Shells</label><label><input id="wire" type="checkbox" /> Wireframe</label></div>
   <div class="row"><button id="glbStatic">Export pose .glb</button><button id="glbAnim">Export opening .glb</button></div>
   <div class="row"><button id="load">Load core JSON…</button><input id="file" type="file" accept=".json,application/json" hidden /></div>
+  </div></details>
   <div id="info"></div>
   <div id="err"></div>
 </div>
