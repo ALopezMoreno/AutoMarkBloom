@@ -1,5 +1,5 @@
 \section{Nested shells}\label{sec:shells}
-\stagebox{\statusrework}{\src{core/src/shells.rs}}
+\stagebox{\statusbuilt}{\src{core/src/shells.rs}}
 
 A bud is layered like an onion. Each petal layer lives on a thin egg-shaped
 shell, and the bud's size follows from how many layers it packs and how thick
@@ -23,12 +23,12 @@ Each layer owns a slot of width
 \[
   w = \tmax\,(1 + c),
 \]
-the thickest a petal can be plus room to crumple. Slots stack outward from the
+the thickest a petal can be plus some initial room. Slots stack outward from the
 core, so layer $k = 0,\dots,L-1$ has its mid-surface at
 \[
   a_k = R_0 + w\,(k + \tfrac12),
 \]
-and the inner side of the sepal envelope is at $R_{\mathrm{env}} = R_0 + wL$.
+and the inner side of the sepal envelope starts at $R_{\mathrm{env}} = R_0 + wL$.
 
 \begin{figure}[ht]
 \centering
@@ -74,7 +74,7 @@ $\pi - \phi_g$. A fractional height $f\in[0,1]$ maps to
 \]
 
 \begin{remark}
-The shells are fixed today. The planned rework lets the sepal envelope swell
-when petals push on it, so the bud can bulge outward like a real peony bud
-instead of staying a fixed egg.
+The shells fix the starting layout only. During development the envelope
+radius becomes a variable that petal pressure pushes outward, and the layer
+radii move out with it in proportion (\cref{sec:packing}).
 \end{remark}

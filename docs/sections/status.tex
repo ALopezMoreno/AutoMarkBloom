@@ -7,13 +7,14 @@
 \toprule
 Stage & Status & Notes \\
 \midrule
-Seeds and traits (\cref{sec:seeds}) & \statusbuilt & One \texttt{u64} per plant; named traits drawn from species ranges. \\
-Three tiers of variation (\cref{sec:tiers}) & \statusplanned & Approved: species, plant means, per-flower bud runs plus chain noise. \\
-Nested shells (\cref{sec:shells}) & \statusrework & Fixed egg-shaped envelope today; a swelling envelope is planned. \\
-Shell automaton (\cref{sec:ca}) & \statusrework & Decides petal count, placement and outline. Will also drive local growth rates. \\
-Thick petal sheets (\cref{sec:sheets}) & \statusrework & $7\times11$ control grid today; a finer grid is planned. \\
-Packing energy (\cref{sec:packing}) & \statusrework & Exact gradient, FIRE relaxation. Layers will be allowed to mix. \\
-Flower JSON (\cref{sec:output}) & \statusbuilt & Format v1, shared with the viewer; byte-identical on every platform. \\
+Seeds and traits (\cref{sec:seeds}) & \statusbuilt & One \texttt{u64} per plant; traits per plant, everything else per flower. \\
+Three tiers of variation (\cref{sec:tiers}) & \statusbuilt & Species ranges, plant traits, per-flower vigour, layer jitter and bud. \\
+Nested shells (\cref{sec:shells}) & \statusbuilt & Starting layout; the sepal envelope then swells during development. \\
+Shell automaton (\cref{sec:ca}) & \statusbuilt & Decides petal count, placement and outline, once per flower. \\
+Thick petal sheets (\cref{sec:sheets}) & \statusbuilt & $11\times19$ control grid per petal. \\
+Bud development (\cref{sec:packing}) & \statusbuilt & Growth automaton on every petal, staged relaxation, swelling sepals, layers can mix. \\
+Latent channels (\cref{sec:channels}) & \statusbuilt & Bud hands named per-petal and per-flower channels to the opening stage. \\
+Flower JSON (\cref{sec:output}) & \statusbuilt & Format v1 with channels and optional development frames. \\
 Flowering Markov chain (\cref{sec:flowering}) & \statuspaused & Only the 2D Python prototype exists. Input-agnostic 3D design approved. \\
 Logistic-map colour (\cref{sec:colour}) & \statusplanned & Design only. \\
 Determinism checks (\cref{sec:determinism}) & \statusbuilt & Golden digests on Linux, macOS, Windows and WebAssembly. \\
@@ -22,8 +23,7 @@ Future design goals (\cref{sec:future}) & \statusplanned & Doubleness, pleats, s
 \end{tabularx}
 \end{center}
 
-\noindent The bud stage is being reworked so that it can produce the swollen,
-crumpled ``marshmallow'' buds and complex packing of real peonies
-(\cref{sec:packing-limits}). The sections on shells, the automaton, sheets and
-packing describe the code as it stands today and will be revised when that
-rework lands.
+\noindent The bud rework for swollen, crumpled ``marshmallow'' buds has
+landed: petals now grow over several stages under their own stochastic growth
+automaton, push the sepals outward, and may fold across layers
+(\cref{sec:packing}).

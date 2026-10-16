@@ -1,10 +1,11 @@
 \section{The stochastic automaton on each shell}\label{sec:ca}
-\stagebox{\statusrework}{\src{core/src/ca.rs}}
+\stagebox{\statusbuilt}{\src{core/src/ca.rs}}
 
 The automaton makes the discrete decisions: how many petals the bud has, where
 each one attaches, and what patch of its shell it wins. It is a cellular
-automaton with stochastic rules, so strictly it is not a pure CA. All draws
-come from the plant's stream 1, so every bud on a plant gets the same layout.
+automaton with stochastic rules, so strictly it is not a pure CA. It runs
+once per flower, from the plant's traits and stream 1 of the flower's seed, so
+siblings get different petal counts and placements from the same rules.
 
 \subsection{Grid}
 Each shell carries a grid of $\NA = 96$ azimuth cells by $\NP = 28$ polar rows.
@@ -71,10 +72,9 @@ span $n_r \cdot 2\pi/\NA$. This per-row centre and span is all the sheet stage
 (\cref{sec:sheets}) uses.
 
 \begin{remark}
-In the rework the automaton keeps running while the petals grow and gives each
-patch of each petal its own random growth rate. Patches that grow faster than
-their neighbours must crumple and ruffle, which is where real petal wrinkles
-come from. This section will be rewritten when that lands.
+This automaton only places petals. Where each petal grows during development
+is decided by a second automaton that runs on each petal's own grid
+(\cref{sec:growth}).
 \end{remark}
 
 \subsection{Relation to the Python prototype}

@@ -9,17 +9,18 @@ genetics and how much from good stochastic rules.
 
 \subsection{Two stages, two kinds of randomness}
 The model follows the design principle \emph{structure first, dynamics second}.
-The list below is how the code works today; \cref{sec:tiers} gives the
-approved design that replaces it.
+Randomness enters at three tiers, detailed in \cref{sec:tiers}.
 
 \begin{enumerate}[leftmargin=*]
-\item \textbf{Bud formation} is seeded per \emph{plant}. Every bud on a plant has
-  exactly the same structure, and two plants of one species differ.
-  A stochastic cellular automaton decides petal count, placement and outline,
-  and a smooth energy packs thick petals into a closed bud.
-\item \textbf{Flowering} is seeded per \emph{flower}. A Markov chain on each
-  petal's geometry opens the bud, so flowers on one plant are siblings rather
-  than clones: same structure, slightly different petals.
+\item \textbf{Bud formation} draws its traits per \emph{plant} but runs per
+  \emph{flower}. A stochastic cellular automaton decides petal count, placement
+  and outline; a second stochastic automaton on each petal decides where it
+  grows; and a smooth energy packs the growing, thick petals into a bud that
+  swells against its sepals. Flowers on one plant share a cultivar but are not
+  clones.
+\item \textbf{Flowering} (on hold) will open the bud with a per-flower Markov
+  chain that drives growth, starting from the latent quantities the bud hands
+  over.
 \item \textbf{Colour} (future) places each petal or petal region on the
   parameter axis of the logistic map. Petals in a stable regime look the same
   in every flower; petals near a bifurcation amplify small differences.
@@ -33,31 +34,33 @@ approved design that replaces it.
   seed/.style={box, fill=gray!10},
   arr/.style={-{Stealth}, thick}]
 \node[seed] (ps) {plant seed\\\texttt{u64}};
-\node[box, right=of ps] (tr) {traits\\from species};
-\node[box, right=of tr] (sh) {nested\\shells};
-\node[box, right=of sh] (ca) {shell\\automaton};
-\node[box, below=of ca] (sht) {thick\\sheets};
-\node[box, left=of sht] (pk) {packing\\energy};
-\node[box, left=of pk] (bud) {packed bud\\(frame 0)};
-\node[seed, below=of bud] (fs) {flower seed\\plant + index};
-\node[box, right=of fs, draw=planned, dashed] (mk) {Markov\\opening};
+\node[box, right=of ps] (tr) {plant traits\\from species};
+\node[seed, right=of tr] (fs) {flower seed\\plant + index};
+\node[box, right=of fs] (ft) {flower traits\\vigour, layers};
+\node[box, below=of ft] (sh) {nested\\shells};
+\node[box, left=of sh] (ca) {shell\\automaton};
+\node[box, left=of ca] (sht) {thick\\sheets};
+\node[box, left=of sht] (dev) {development\\growth + packing};
+\node[box, below=of dev] (bud) {packed bud\\+ channels};
+\node[box, right=of bud, draw=planned, dashed] (mk) {Markov\\opening};
 \node[box, right=of mk, draw=planned, dashed] (col) {logistic-map\\colour};
 \draw[arr] (ps) -- (tr);
-\draw[arr] (tr) -- (sh);
+\draw[arr] (tr) -- (fs);
+\draw[arr] (fs) -- (ft);
+\draw[arr] (ft) -- (sh);
 \draw[arr] (sh) -- (ca);
 \draw[arr] (ca) -- (sht);
-\draw[arr] (sht) -- (pk);
-\draw[arr] (pk) -- (bud);
+\draw[arr] (sht) -- (dev);
+\draw[arr] (dev) -- (bud);
 \draw[arr] (bud) -- (mk);
-\draw[arr] (fs) -- (mk);
 \draw[arr] (mk) -- (col);
 \end{tikzpicture}
 \caption{The pipeline. Solid boxes are built; dashed boxes are designed only.}
 \label{fig:pipeline}
 \end{figure}
 
-\subsection{Three tiers of variation (approved design)}\label{sec:tiers}
-\stagebox{\statusplanned. The code still seeds the bud per plant.}{\src{core/src/traits.rs}, \src{core/src/species.rs}}
+\subsection{Three tiers of variation}\label{sec:tiers}
+\stagebox{\statusbuilt}{\src{core/src/traits.rs}, \src{core/src/species.rs}, \src{core/src/latents.rs}}
 
 Identical buds on every flower of a plant go too far: real flowers on one
 plant share a genotype but still differ in petal count, size and placement,
@@ -85,13 +88,14 @@ Flower & An overall vigour or size factor (main bud versus side bud,
 \end{tabularx}
 \end{center}
 
-The change from today's code is that traits stay per plant but the bud is run
-per flower, seeded by the flower. Siblings then look like the same cultivar
-without being clones.
+In the code, traits are drawn per plant, and everything a flower grows (its
+automaton run, growth, packing and latent quantities) is seeded per flower
+(\cref{sec:seeds}). Siblings look like the same cultivar without being clones.
 
 \paragraph{The bud hands over latent quantities.} Besides its packed geometry,
-each petal leaves the bud with a vector of latent quantities that become the
-inputs to the opening stage (\cref{sec:flowering}):
+each petal leaves the bud with latent quantities, stored as named channels
+(\cref{sec:channels}), that become the inputs to the opening stage
+(\cref{sec:flowering}):
 \begin{itemize}[leftmargin=*]
 \item \emph{growth potential}: target length, width and edge growth, largely
   read from the automaton (a petal's patch width and the rows it reached stand

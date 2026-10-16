@@ -1,24 +1,28 @@
-\section{Packing: a smooth energy and its exact gradient}\label{sec:packing}
-\stagebox{\statusrework}{\src{core/src/energy.rs}, \src{core/src/pack.rs}}
+\section{Bud development: growth, packing and swelling}\label{sec:packing}
+\stagebox{\statusbuilt}{\src{core/src/pack.rs}, \src{core/src/growth.rs}, \src{core/src/energy.rs}}
 
-The sheets laid out by \cref{sec:sheets} fit their patches exactly. Packing
-makes every petal \emph{want} to be larger than the room it has, then lets all
-petals settle together by minimising one energy. Petals that cannot grow
-outward must buckle and fold around each other, and that folding is the 3D
-packing.
+The sheets laid out by \cref{sec:sheets} fit their patches exactly. The bud
+then develops over $G$ growth stages (10 to 14 for peony). In each stage a
+stochastic automaton on every petal decides which parts of it grow, the
+petals' preferred sizes follow that growth, and all petals settle together by
+minimising one smooth energy in which the sepal envelope can give way. Uneven
+growth forces petals to ruffle and crumple, crowding slows growth where petals
+press hardest, and the pressure that remains swells the bud.
 
 \subsection{Unknowns}
 The unknowns are the positions $\x_i\in\R^3$ of all control points of all
-petals, $X = (\x_1,\dots,\x_n)$. Point $i$ belongs to petal $p(i)$ on layer
-$k(i)$ and has a fixed thickness $t_i$. The base row ($v=0$) of every petal is
-pinned to the receptacle and never moves.
+petals, $X = (\x_1,\dots,\x_n)$, plus the sepal envelope's scaled radius $R$.
+Point $i$ belongs to petal $p(i)$ on layer $k(i)$ and has a fixed thickness
+$t_i$. The base row ($v=0$) of every petal is pinned to the receptacle and
+never moves.
 
 \subsection{The energy}
 \[
-  E(X) = E_{\mathrm{spring}} + E_{\mathrm{band}} + E_{\mathrm{env}} + E_{\mathrm{contact}}.
+  E(X, R) = E_{\mathrm{spring}} + E_{\mathrm{band}} + E_{\mathrm{env}} + E_{\mathrm{sepal}} + E_{\mathrm{contact}}.
 \]
 Every term is a spring or a squared hinge $\tfrac12 k\,[\,\cdot\,]_+^2$, so $E$ is
-continuously differentiable ($C^1$) and has an exact gradient.
+continuously differentiable ($C^1$) and has an exact gradient with respect to
+both $X$ and $R$.
 
 \paragraph{Springs (stretch, shear, bending).} Each petal's control grid is
 joined by springs $(a,b)$ with stiffness $k_{ab}$ and rest length $\ell_{ab}$:
@@ -34,36 +38,61 @@ Spring & Joins & Stiffness \\
 \midrule
 stretch & neighbours along $u$ and along $v$ & 40 \\
 shear & both diagonals of each grid cell & 10 \\
-bending & points two apart along $u$ and along $v$ & $6\,(\bar t/\tmax)^3$ \\
+bending & points two apart along $u$ and along $v$ & $k_b\,(t_a/\tmax)^3$ \\
 \bottomrule
 \end{tabular}
 \end{center}
-Here $\bar t$ is the petal's mean thickness. Bending stiffness of a plate grows
-with the cube of its thickness, so thin petals crumple more easily than thick
-ones. (Today $\bar t$ is one value per petal, not per point.)
+Bending stiffness of a plate grows with the cube of its thickness, so the thin
+edges crumple more easily than the thick base. Here $t_a$ is the thickness at
+the spring's first point and $k_b$ is the plant's \texttt{petal\_stiffness}
+(60 to 120 for peony): stiffer petals fold in broader waves and push the
+sepals out more.
 
-Every rest length is the spring's laid-out length times the growth factor $g$:
+Every spring starts with its laid-out length $\ell^0_{ab}$ as its rest length.
+After each growth stage the rest length follows the growth of its two ends,
 \[
-  \ell_{ab} = g\,\lVert\x^{0}_a - \x^{0}_b\rVert, \qquad g\in[1.12, 1.35]\text{ for peony}.
+  \ell_{ab} = \ell^0_{ab}\,\tfrac12\bigl(S_a + S_b\bigr),
 \]
-Each petal therefore wants to be $g$ times larger in every direction, about
-$g^2$ times its patch area, which it cannot achieve without leaving its slot or
-pushing into its neighbours. This is what forces buckling.
+where $S_i$ is node $i$'s accumulated linear growth (\cref{sec:growth}). Where
+growth is uneven, neighbouring springs disagree about how long the petal
+should be, and the sheet can only satisfy them by buckling out of its surface.
 
-\paragraph{Layer slot.} Each point should stay within its layer's slot, less its
-own half-thickness. With half-width $h_i = \max\bigl(0, (w - t_i)/2\bigr)$ and
-excess $\epsilon_i = \lvert\rt(\x_i) - a_{k(i)}\rvert - h_i$,
+\paragraph{Loose layer band.} Each point is pulled loosely toward its own
+layer, but may stray from it, so petals can fold over each other and between
+layers. The layers keep their relative place between the stamens and the
+sepals as the bud swells: layer $k$ sits at
+\[
+  a_k(R) = R_0 + \lambda_k\,(R - R_0), \qquad \lambda_k = \frac{a_k - R_0}{R_{\mathrm{env}} - R_0},
+\]
+where $a_k$ and $R_{\mathrm{env}}$ are the starting values from
+\cref{sec:shells}. With half-width $h_i = \max\bigl(0, (f w - t_i)/2\bigr)$,
+where $f$ is the plant's \texttt{layer\_freedom} (1.5 to 3 slots for peony),
+and excess $\epsilon_i = \lvert\rt(\x_i) - a_{k(i)}(R)\rvert - h_i$,
 \[
   E_{\mathrm{band}} = \sum_i \tfrac12 k_{\mathrm{band}}\,[\epsilon_i]_+^2,
   \qquad
-  \frac{\partial}{\partial \x_i} = k_{\mathrm{band}}\,[\epsilon_i]_+\,\operatorname{sign}\bigl(\rt - a_{k(i)}\bigr)\,\nabla\rt(\x_i).
+  \frac{\partial}{\partial \x_i} = k_{\mathrm{band}}[\epsilon_i]_+\,\sigma_i\,\nabla\rt(\x_i),
+  \qquad
+  \frac{\partial}{\partial R} = -\sum_i k_{\mathrm{band}}[\epsilon_i]_+\,\sigma_i\,\lambda_{k(i)},
 \]
+with $\sigma_i = \operatorname{sign}\bigl(\rt(\x_i) - a_{k(i)}(R)\bigr)$.
 
 \paragraph{Envelope and core.} Points stay inside the sepals and outside the
 stamens, each allowing for half its thickness:
 \[
-  E_{\mathrm{env}} = \sum_i \tfrac12 k_{\mathrm{env}}\Bigl(\bigl[\rt(\x_i) - (R_{\mathrm{env}} - \tfrac{t_i}{2})\bigr]_+^2 + \bigl[(R_0 + \tfrac{t_i}{2}) - \rt(\x_i)\bigr]_+^2\Bigr).
+  E_{\mathrm{env}} = \sum_i \tfrac12 k_{\mathrm{env}}\Bigl(\bigl[\rt(\x_i) - (R - \tfrac{t_i}{2})\bigr]_+^2 + \bigl[(R_0 + \tfrac{t_i}{2}) - \rt(\x_i)\bigr]_+^2\Bigr).
 \]
+A point pressing on the envelope pushes $R$ outward with force
+$k_{\mathrm{env}}[\rt(\x_i) - R + t_i/2]_+$.
+
+\paragraph{Sepals.} The envelope resists growing past its rest radius
+$R_{\mathrm{rest}}$ with the plant's sepal stiffness $k_s$ (\texttt{sepal\_\allowbreak stiffness}):
+\[
+  E_{\mathrm{sepal}} = \tfrac12 k_s\,(R - R_{\mathrm{rest}})^2 .
+\]
+The rest radius itself grows a little over development (\cref{sec:stages}).
+Soft sepals (small $k_s$) let the bud swell like a marshmallow; stiff ones keep
+it tight and force more crumpling inside.
 
 \paragraph{Contact.} Two petals must keep their mid-surfaces at least their
 combined half-thickness apart. For a point $\x_i$ and a triangle
@@ -101,33 +130,77 @@ exact wherever the closest point is unique.
 \toprule
 Constant & Value \\
 \midrule
-$k_{\mathrm{band}}$ & 400 \\
+$k_{\mathrm{band}}$ & 150 \\
 $k_{\mathrm{env}}$ (envelope and core) & 400 \\
 $k_{\mathrm{contact}}$ & 1500 \\
+$k_s$ & plant trait, 5--25 for peony \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\paragraph{Checked by test.} A test squeezes a bud so that the slot, envelope
-and contact terms are all active and compares the analytic gradient with
-central finite differences ($h = 10^{-6}$) on 60 coordinates. It caught one
-real bug during development.
+\paragraph{Checked by test.} A test squeezes a bud so that the band, envelope
+and contact terms are all active, with the envelope below its rest radius, and
+compares the analytic gradient with central finite differences ($h=10^{-6}$)
+on 60 point coordinates and on $R$.
 
-\subsection{Breaking symmetry}
-A perfectly laid-out sheet under uniform growth could stay balanced on its
-shell without choosing a direction to buckle. Before relaxing, every unpinned
-point is nudged along the shell normal $\nabla\rt/\lVert\nabla\rt\rVert$ by
+\subsection{The growth automaton}\label{sec:growth}
+Each petal carries a second stochastic automaton on its own $\NU\times\NV$
+node grid, drawing from stream 3 of the flower's seed. Every node $i$ has an
+accumulated linear growth $S_i$ (starting at 1) and is either active or quiet
+in each stage. The base row never grows.
+
+\paragraph{Activity.} In each stage a node becomes active with probability
 \[
-  \delta_i = 0.1\,w\,\frac{v_i}{\NV - 1}\,\xi_i, \qquad \xi_i\sim\Norm(0,1)\text{ from stream 2},
+  p_i = a_0 + a_1\,\frac{n^{\mathrm{on}}_i}{n_i} - a_p \min(P_i, 1),
 \]
-growing from zero at the base to $0.1w$ at the tip. Because the nudge comes from
-the plant's stream, all buds on a plant buckle the same way.
+where $n^{\mathrm{on}}_i$ of its $n_i$ grid neighbours (up to four) were active
+in the previous stage and $P_i$ is the contact pressure it felt in the last
+relaxation (below). Growth therefore comes in patches that spread and fade,
+and crowded tissue slows down.
 
-\subsection{Relaxation by FIRE}
-The energy is minimised by FIRE (Fast Inertial Relaxation Engine), gradient
-descent with inertia that is reset whenever it starts climbing. With
-velocities $\vect v_i$ (pinned points have zero gradient and never move), each
-iteration:
+\paragraph{Growth increment.} An active node grows by $\gamma$ and a quiet one
+by $q\gamma$. The claw next to the receptacle grows less, and margins grow
+more:
+\[
+\begin{gathered}
+  \delta_i = \gamma\,\bigl(1 \text{ or } q\bigr)\,\min\!\Bigl(\frac{v}{3}, 1\Bigr)\bigl(1 + b_e\,m(u,v)\bigr),
+  \\
+  m(u,v) = \max\!\Bigl(0,\; 1 - \tfrac12\min\bigl(\min(u, \NU-1-u),\; \NV-1-v\bigr)\Bigr),
+\end{gathered}
+\]
+so $m$ is 1 on the side edges and tip and fades to 0 two nodes in. The
+increments are then smoothed by three passes that replace each node's value by
+the mean of itself and its grid neighbours, as growth signals diffuse through
+tissue, so folds come out as smooth bulges rather than node-sized kinks.
+Finally $S_i \leftarrow S_i(1 + \delta_i)$.
+
+\paragraph{Pressure.} The pressure on a node is the sum of the contact forces
+$k_{\mathrm{contact}}(d_{\min}-d)$ it takes part in (shared among a triangle's
+corners by their barycentric weights) plus its envelope force
+$k_{\mathrm{env}}[\rt(\x_i) - R + t_i/2]_+$. It is scaled so that $P_i = 1$
+corresponds to a contact force of $k_{\mathrm{contact}}\,\tmax/4$.
+
+\subsection{Stages and relaxation}\label{sec:stages}
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Symmetry breaking.} Every unpinned point is nudged along the
+  shell normal $\nabla\rt/\lVert\nabla\rt\rVert$ by
+  $0.1\,w\,\tfrac{v_i}{\NV - 1}\,\xi_i$ with $\xi_i\sim\Norm(0,1)$ from stream 2
+  of the flower's seed, growing from zero at the base, so buckling picks a
+  direction. The envelope starts at $R = R_{\mathrm{rest}} = R_{\mathrm{env}}$,
+  and the bud is relaxed once.
+\item \textbf{Each stage} $g = 1,\dots,G$: compute every node's pressure; step
+  each petal's growth automaton; set every rest length from the new growth;
+  set the sepals' rest radius to
+  $R_{\mathrm{rest}} = R_{\mathrm{env}}\bigl(1 + g_s\,g/G\bigr)$; relax.
+\item \textbf{Settle.} After the last stage, relax for longer.
+\end{enumerate}
+Defaults: 250 relaxation iterations per stage and 600 to settle.
+
+\paragraph{Relaxation by FIRE.} The energy is minimised by FIRE (Fast Inertial
+Relaxation Engine), gradient descent with inertia that is reset whenever it
+starts climbing. The envelope radius $R$ is one more coordinate with its own
+velocity, included in the power and norms. With velocities $\vect v$ (pinned
+points have zero gradient and never move), each iteration:
 \begin{enumerate}[leftmargin=*]
 \item computes $\nabla E$ and the power $P = -\nabla E\cdot \vect v$;
 \item if $P > 0$, steers the velocity toward the downhill direction,
@@ -135,12 +208,12 @@ iteration:
   and after more than 5 such steps in a row sets
   $\Delta t \leftarrow \min(1.1\,\Delta t, \Delta t_{\max})$ and $\alpha \leftarrow 0.99\,\alpha$;
 \item if $P \le 0$, stops: $\vect v \leftarrow 0$, $\Delta t \leftarrow \Delta t/2$, $\alpha\leftarrow 0.1$;
-\item integrates $\vect v_i \leftarrow \vect v_i - \Delta t\,\nabla_i E$ and
-  $\x_i \leftarrow \x_i + \Delta t\,\vect v_i$, with each point's step clipped to
-  at most $\tmax/4$ so no petal can jump through another.
+\item integrates $\vect v \leftarrow \vect v - \Delta t\,\nabla E$ and moves each
+  point and $R$ by $\Delta t\,\vect v$, with each step clipped to at most
+  $\tmax/4$ so no petal can jump through another.
 \end{enumerate}
-Defaults: 2000 iterations, $\Delta t_{\max} = 0.03$, starting from
-$\Delta t = \Delta t_{\max}/2$ and $\alpha = 0.1$.
+Each relaxation starts from $\Delta t = \Delta t_{\max}/2$ with
+$\Delta t_{\max} = 0.03$ and $\alpha = 0.1$.
 
 \subsection{Finding contacts cheaply}
 Testing every point against every triangle would be quadratic in the number of
@@ -149,38 +222,28 @@ petals. Instead a list of candidate (point, triangle) pairs closer than
   \text{reach} = \tmax + \text{skin}, \qquad \text{skin} = 2\tmax,
 \]
 is built with a spatial hash, and reused until some point has moved more than
-half the skin since the list was built. Contacts only matter below
-$d_{\min}\le\tmax$, and a point and a triangle that each moved less than half
-the skin cannot have closed more than one skin, so no contact is missed
-between rebuilds. The hash is used only for lookup; the list is sorted
-before use, so results never depend on hash order (\cref{sec:determinism}).
+half the skin since the list was built; it is also rebuilt at the start of
+every stage. Contacts only matter below $d_{\min}\le\tmax$, and a point and a
+triangle that each moved less than half the skin cannot have closed more than
+one skin, so no contact is missed between rebuilds. The hash is used only for
+lookup; the list is sorted before use, so results never depend on hash order
+(\cref{sec:determinism}).
 
-\subsection{What the packer reports}
-After relaxation the core reports the energy terms before and after, the number
-of contact-list rebuilds, the worst overlap between two petals
-$\max(d_{\min} - d)/\tmax$, and the worst excursion outside a slot
-$\max\epsilon_i/\tmax$. These are written into the flower JSON's \texttt{meta}
-block.
+\subsection{What development reports}
+The core reports the energy terms before and after, the number of stages,
+relaxation iterations and contact-list rebuilds, the worst overlap between two
+petals $\max(d_{\min} - d)/\tmax$, the worst excursion outside a layer's band
+$\max\epsilon_i/\tmax$, the envelope radius at the start and end (how much the
+bud swelled), and the mean and largest accumulated growth $S_i$. These go into
+the flower JSON's \texttt{meta} block. With frame recording on, the geometry and
+envelope radius after every stage are kept, so the viewer can play the bud
+swelling (\cref{sec:output}).
 
-\subsection{Current limits and the rework}\label{sec:packing-limits}
-The current bud has two visible weaknesses: the buckling is gentle, so the bud
-reads as neat nested layers rather than crumpled tissue, and the inner petals
-stop partway up, leaving an empty dome at the top. The slot term
-$E_{\mathrm{band}}$ is a large part of the first: it holds every point inside
-its own layer.
-
-Real peony buds swell like marshmallows and have very complex packing, and the
-bud stage must be able to model that. The rework under way changes four
-things:
-\begin{itemize}[leftmargin=*]
-\item \textbf{growth driven by the automaton}: per-patch random growth rates, so
-  unequal growth forces crumples and ruffles (\cref{sec:ca});
-\item \textbf{swelling}: the sepal envelope gives way when petals push on it
-  (\cref{sec:shells});
-\item \textbf{mixed layers}: petals may fold over each other and between
-  layers, held apart only by their thickness, which loosens or removes the slot
-  term;
-\item \textbf{finer petals}: a much finer control grid per petal
-  (\cref{sec:sheets}).
-\end{itemize}
-This section will be rewritten when the rework lands.
+\subsection{Why it was reworked}\label{sec:packing-limits}
+The first version grew every petal uniformly by one growth factor and held
+each point inside its own layer's slot. Its buds read as neat nested layers
+with gentle buckling, and the inner petals stopped partway up. Real peony buds
+swell like marshmallows and pack in complex folds, so the rework added
+per-node growth from the automaton, a sepal envelope that gives way, a loose
+band so petals can cross layers, and a finer $11\times19$ grid that can hold
+small crumples.

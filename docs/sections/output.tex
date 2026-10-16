@@ -1,5 +1,5 @@
 \section{Output: the flower JSON}\label{sec:output}
-\stagebox{\statusbuilt}{\src{core/src/export.rs}, \src{viewer/FORMAT.md}, \src{viewer/src/mesh.ts}}
+\stagebox{\statusbuilt}{\src{core/src/export.rs}, \src{core/src/channels.rs}, \src{viewer/FORMAT.md}, \src{viewer/src/mesh.ts}}
 
 The core's one canonical output is a JSON document (format
 \texttt{automark-flower}, version 1) shared with the viewer. The core owns the
@@ -8,21 +8,30 @@ geometry; the viewer only meshes, shades, animates and exports glTF.
 \subsection{Contents}
 \begin{itemize}[leftmargin=*]
 \item \texttt{seed} as a decimal string (JavaScript numbers lose precision
-  above $2^{53}$), \texttt{flower\_index} (\texttt{null} for the bud),
-  units of the core radius and $+z$ up.
+  above $2^{53}$), \texttt{flower\_index}, units of the core radius and $+z$
+  up.
 \item \texttt{shells}: aspect, slot width, layer radii $a_k$, core and envelope.
 \item \texttt{grid}: samples per petal, \texttt{nu} from base to tip and
   \texttt{nv} from one edge to the other. The core evaluates each sheet with
-  3 samples per span along and 2 across, giving $10\cdot3+1 = 31$ by
-  $6\cdot2+1 = 13$ points.
+  2 samples per span in both directions, giving $18\cdot2+1 = 37$ by
+  $10\cdot2+1 = 21$ points.
+\item \texttt{channels}: the declaration of every latent channel (name, scope,
+  dimensions, optional range, kind and, for categorical channels, labels;
+  \cref{sec:channels}).
 \item \texttt{petals}: id, layer and attachment angle of each petal.
-\item \texttt{frames}: for each time $t$, every petal's evaluated mid-surface
-  points and thickness, row-major. The bud is one frame at $t=0$; flowering
-  will add frames with the same topology, so the opening plays back smoothly
+\item \texttt{frames}: for each time $t$, a stage label, every petal's
+  evaluated mid-surface points and thickness (row-major), and channel values.
+  The closed bud is the frame at $t=0$. With development frames recorded, the
+  growth stages come first, from $t=-1$ (first stage) up to $t=0$, each with
+  its own \texttt{sepal\_radius}. Every channel's value is written in the first
+  frame (per petal for petal channels, per frame for flower channels); a later
+  frame that omits a channel keeps its last value. Flowering will add frames
+  with $t>0$ and the same topology, so the whole sequence plays back smoothly
   and exports as an animated glTF.
-\item \texttt{meta}: the species, the plant's traits and the packing report.
+\item \texttt{meta}: the species, the plant's traits, the flower's traits and
+  the development report.
 \end{itemize}
-Coordinates and thicknesses are rounded to $10^{-6}$, far below petal
+All numbers are rounded to $10^{-5}$, far below petal
 thickness, which keeps files small.
 
 \subsection{Orientation}
