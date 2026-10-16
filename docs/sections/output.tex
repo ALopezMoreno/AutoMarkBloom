@@ -1,0 +1,37 @@
+\section{Output: the flower JSON}\label{sec:output}
+\stagebox{\statusbuilt}{\src{core/src/export.rs}, \src{viewer/FORMAT.md}, \src{viewer/src/mesh.ts}}
+
+The core's one canonical output is a JSON document (format
+\texttt{automark-flower}, version 1) shared with the viewer. The core owns the
+geometry; the viewer only meshes, shades, animates and exports glTF.
+
+\subsection{Contents}
+\begin{itemize}[leftmargin=*]
+\item \texttt{seed} as a decimal string (JavaScript numbers lose precision
+  above $2^{53}$), \texttt{flower\_index} (\texttt{null} for the bud),
+  units of the core radius and $+z$ up.
+\item \texttt{shells}: aspect, slot width, layer radii $a_k$, core and envelope.
+\item \texttt{grid}: samples per petal, \texttt{nu} from base to tip and
+  \texttt{nv} from one edge to the other. The core evaluates each sheet with
+  3 samples per span along and 2 across, giving $10\cdot3+1 = 31$ by
+  $6\cdot2+1 = 13$ points.
+\item \texttt{petals}: id, layer and attachment angle of each petal.
+\item \texttt{frames}: for each time $t$, every petal's evaluated mid-surface
+  points and thickness, row-major. The bud is one frame at $t=0$; flowering
+  will add frames with the same topology, so the opening plays back smoothly
+  and exports as an animated glTF.
+\item \texttt{meta}: the species, the plant's traits and the packing report.
+\end{itemize}
+Coordinates and thicknesses are rounded to $10^{-6}$, far below petal
+thickness, which keeps files small.
+
+\subsection{Orientation}
+The surface normal $\partial_u \x \times \partial_v \x$ must point away from the
+bud centre. For each petal the core sums
+$(\partial_u\x\times\partial_v\x)\cdot\nabla\rt$ over its grid cells and, if the
+sum is negative, reverses the across direction.
+
+\subsection{Solid petals}
+The viewer turns each mid-surface into a solid by offsetting it by $\pm t/2$
+along the unit normal and closing the rim, so exported models have real
+thickness.

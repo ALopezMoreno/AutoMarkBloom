@@ -1,0 +1,38 @@
+\section{Colour: logistic-map instability}\label{sec:colour}
+\stagebox{\statusplanned}{none yet}
+
+Colour is not part of the Markov state; it is a separate future stage for buds
+with several differently coloured or colour-graded petals. This section
+records the design.
+
+\subsection{The logistic map}
+\[
+  x_{n+1} = r\,x_n(1 - x_n), \qquad x_n\in[0,1],\; r\in[0,4].
+\]
+For $1 < r < 3$ every orbit settles on the fixed point $x^\star = 1 - 1/r$. At
+$r_1 = 3$ it splits into a 2-cycle, at $r_2 = 1+\sqrt6 \approx 3.449$ into a
+4-cycle, and the period-doublings accumulate at $r_\infty\approx 3.5699$, beyond
+which most $r$ give chaos. How fast nearby orbits separate is measured by the
+Lyapunov exponent
+\[
+  \Lambda(r) = \lim_{N\to\infty}\frac1N\sum_{n=0}^{N-1}\ln\lvert r(1 - 2x_n)\rvert,
+\]
+negative in stable regimes and positive in chaotic ones.
+
+\subsection{How the model will use it}
+\begin{itemize}[leftmargin=*]
+\item Each petal, or each region of a petal, inherits a position $r$ on the
+  parameter axis.
+\item Far inside a stable regime, small random differences die out, so the
+  petal gets the same colour in every flower on the plant.
+\item Near a bifurcation, or in the chaotic band, small stochastic differences
+  are amplified, so only those petals vary between sibling flowers.
+\item The Markov chain does not wander into instability by itself. Its steps
+  drive the logistic iterations from the inherited point, so unstable petals
+  look chaotic and stable ones stay locked.
+\end{itemize}
+
+\subsection{Inheritance (later)}
+Part of what a plant passes on is where its petals sit on the bifurcation
+diagram, which makes ``closeness to chaos'' a heritable, selectable trait. This
+waits until the single-plant model works.

@@ -1,0 +1,89 @@
+\section{Seeds, random streams and traits}\label{sec:seeds}
+\stagebox{\statusbuilt}{\src{core/src/rng.rs}, \src{core/src/traits.rs}, \src{core/src/species.rs}}
+
+\subsection{The random number generator}
+All randomness comes from one fully specified generator, so a seed means the
+same random stream in every build, engine and language port. No library or
+operating-system generator is used.
+
+\paragraph{SplitMix64} mixes a 64-bit integer $z$ (all arithmetic modulo $2^{64}$,
+$\oplus$ is XOR, $\gg$ is a logical shift):
+\begin{align*}
+z &\leftarrow z + \texttt{0x9E3779B97F4A7C15},\\
+z &\leftarrow (z \oplus (z \gg 30)) \cdot \texttt{0xBF58476D1CE4E5B9},\\
+z &\leftarrow (z \oplus (z \gg 27)) \cdot \texttt{0x94D049BB133111EB},\\
+\mathrm{sm}(z) &= z \oplus (z \gg 31).
+\end{align*}
+
+\paragraph{Sub-streams.} Each part of the model draws from its own stream, so
+changing how many numbers one part consumes never shifts another part's
+sequence. For plant seed $s$ and stream key $k$,
+\[
+  \mathrm{derive}(s,k) = \mathrm{sm}\bigl(s \oplus \mathrm{sm}(k + \texttt{0x5EED})\bigr),
+\]
+and the stream's generator is PCG32 seeded with $\mathrm{derive}(s,k)$ and
+increment $2k+1$.
+
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Key $k$ & Used by & Seeded per \\
+\midrule
+0 & trait draws (\cref{sec:traits}) & plant \\
+1 & shell automaton (\cref{sec:ca}) & plant \\
+2 & packing symmetry breaking (\cref{sec:packing}) & plant \\
+$1000 + i$ & flowering of flower $i$ (\cref{sec:flowering}) & flower \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{PCG32} (XSH-RR variant) has a 64-bit state $S$ and odd increment $c$:
+\[
+  S' = 6364136223846793005\,S + c, \qquad
+  \text{out} = \mathrm{rotr}_{32}\Bigl(\bigl((S \gg 18) \oplus S\bigr) \gg 27,\; S \gg 59\Bigr).
+\]
+Derived draws:
+\begin{itemize}[leftmargin=*]
+\item a uniform $U\in[0,1)$ with 53 random bits, built from two outputs
+  $a,b$ as $\bigl(2^{26}(a\gg5) + (b\gg6)\bigr)/2^{53}$;
+\item $\Unif[\ell,h] = \ell + (h-\ell)U$;
+\item a uniform integer in $[\ell,h]$ as $\min(\ell + \lfloor U(h-\ell+1)\rfloor, h)$;
+\item a standard normal by Box--Muller, $\sqrt{-2\ln U_1}\cos(2\pi U_2)$;
+\item Fisher--Yates shuffles using the integer draw.
+\end{itemize}
+
+\subsection{Species and plant traits}\label{sec:traits}
+A \emph{species} is a set of ranges. A \emph{plant} is one value drawn
+uniformly from each range, in a fixed order, from stream 0. The result is an
+explicit list of named numbers (\texttt{PlantTraits}), so that inheritance can
+later mutate and cross named traits rather than an opaque seed. All
+species-specific numbers live in the species; nothing peony-specific is
+hard-coded anywhere else. Peony is the built-in preset; other species are JSON
+files with the same fields.
+
+The number of layers $L$ is drawn as $\lfloor\Unif[L_0, L_1+1]\rfloor$, capped at
+$L_1$ and at least 1, so every integer in the range is equally likely.
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l c c X@{}}
+\toprule
+Trait & Symbol & Peony range & Meaning \\
+\midrule
+\texttt{layers} & $L$ & 6--10 & number of petal layers (shells) \\
+\texttt{aspect} & $\alpha$ & 1.05--1.3 & bud height over width \\
+\texttt{max\_thickness} & $\tmax$ & 0.035--0.06 & hard thickness cap, in core radii \\
+\texttt{edge\_thickness} & $e$ & 0.3--0.5 & edge thickness as a fraction of $\tmax$ \\
+\texttt{crumple\_room} & $c$ & 0.6--1.2 & extra slot width per layer, in multiples of $\tmax$ \\
+\texttt{inhibit\_sigma} & $\sigma$ & 0.45--0.75 & reach of a primordium's inhibition (arc length) \\
+\texttt{inhibit\_threshold} & $\tau$ & 0.35--0.6 & initiation allowed below this inhibition \\
+\texttt{init\_prob} & $p_{\mathrm{init}}$ & 0.2--0.45 & chance an uninhibited cell initiates \\
+\texttt{stagger} & $\beta$ & 0.5--1.0 & weight of the layer below's primordia \\
+\texttt{up\_prob} & $p_\uparrow$ & 0.6--0.9 & chance a petal claims the empty cell above it \\
+\texttt{lateral\_prob} & $p_\leftrightarrow$ & 0.25--0.55 & chance a petal claims an empty cell beside it \\
+\texttt{inner\_height} & $h_{\mathrm{in}}$ & 0.5--0.7 & fraction of shell height the innermost petals reach \\
+\texttt{growth\_factor} & $g$ & 1.12--1.35 & how much longer petals grow than their patch \\
+\texttt{phi\_base} & $\phi_b$ & 0.45 & polar angle of the attachment ring (rad) \\
+\texttt{phi\_top\_gap} & $\phi_g$ & 0.10 & how far short of the top pole petals stop (rad) \\
+\bottomrule
+\end{tabularx}
+\end{center}

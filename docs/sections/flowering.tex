@@ -1,0 +1,73 @@
+\section{Flowering: the per-flower Markov chain}\label{sec:flowering}
+\stagebox{\statuspaused. Only the 2D Python prototype exists.}{\src{prototype-python/automark_bloom/petal_markov.py} (prototype); 3D core not started}
+
+Flowering takes over once the bud structure is fixed. Each growth step depends
+probabilistically on the previous state, a semi-random walk, and each flower
+draws from its own stream (key $1000+i$ for flower $i$,
+\cref{sec:seeds}). Flowers on one plant therefore share their bud and their
+targets but take different paths: siblings, not clones.
+
+Andres has put the 3D flowering stage on hold. This section records the
+prototype that exists and the design agreed so far, and will be rewritten when
+work resumes.
+
+\subsection{The prototype (2D, discrete)}
+\paragraph{State.} Each petal carries three bin indices: length $\lambda$ (14 bins,
+0.08 to 0.72 flower radii), width $\omega$ (12 bins, 0.06 to 0.60) and curl
+$\gamma$ (13 bins, $-20^\circ$ to $100^\circ$; positive cups inward, negative
+bends outward). Every petal starts as a closed bud: shortest, narrowest and
+fully curled. The walk runs 45 steps.
+
+\paragraph{Targets.} Each petal has a target bin for each variable, set by its
+place in the bud: outer petals end long, wide and flat, inner petals short and
+cupped. For a petal whose outer edge sits at relative radius $\pi_1\in[0,1]$,
+the target length is $0.22 + 0.48\,\pi_1$ and the target curl is
+$80^\circ - 95^\circ\pi_1$; the target width comes from the petal's angular span
+in the bud grid.
+
+\paragraph{Moves.} At every step each index $i$ moves by $+1$, $0$ or $-1$.
+With $d = i^\star - i$ the (fractional) distance to the target bin and
+$\sigma(z) = 1/(1+e^{-z})$,
+\[
+  \Pr(+1) = g_\uparrow\,\sigma(1.5\,d), \qquad
+  \Pr(-1) = g_\downarrow\,\sigma(-1.5\,d), \qquad
+  \Pr(0) = 1 - \Pr(+1) - \Pr(-1),
+\]
+so the walk drifts toward the target but keeps jittering around it. Indices are
+clipped to their bins.
+\begin{center}\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Variable & $g_\uparrow$ & $g_\downarrow$ \\
+\midrule
+length & 0.55 & 0.20 \\
+width & $0.50\,e^{-1.5P}$ & 0.20 \\
+curl & 0.35 & 0.45 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Packing pressure.} $P$ is a petal's fractional angular overlap with
+neighbours within two rings, computed from the current state. Crowding
+suppresses widening (the $e^{-1.5P}$ factor) and raises the curl target by
+$30^\circ\min(P,1)$, so crowded petals bend instead of spreading. Because $P$
+couples petals, the Markov property holds for the joint state of all petals,
+not for each petal on its own.
+
+\subsection{The 3D design agreed so far}
+\begin{itemize}[leftmargin=*]
+\item \textbf{Same object throughout.} Flowering starts from each petal's
+  packed sheet in the bud (\cref{sec:sheets,sec:packing}) and reshapes those
+  same control points, so the opening animation starts from the packed bud.
+\item \textbf{Continuous state.} Length, width and curl change continuously
+  rather than in bins, while the steps stay random.
+\item \textbf{The chain moves targets; the energy moves petals.} The Markov
+  chain changes each petal's targets (for example rest lengths and preferred
+  curvature), and the sheets follow by relaxing the same differentiable energy,
+  so petals keep their thickness and never pass through each other while
+  opening.
+\item \textbf{Frames.} Each step becomes a frame in the flower JSON with the
+  same topology (\cref{sec:output}).
+\item \textbf{Ideas to fold in} from the design notes: phyllotactic spiral
+  angle, petals growing larger outward, and bending to pack against neighbours.
+\end{itemize}

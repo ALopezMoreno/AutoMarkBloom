@@ -1,0 +1,90 @@
+\section{Overview}\label{sec:overview}
+
+\subsection{Aim}
+AutoMarkBloom is the non-genomic sister of Genobloom. It grows flowers, starting
+with peonies, from purely stochastic developmental rules with no genotype and no
+pathways. The interest is in the construction method itself, so that it can
+later be compared with the genetic branch to see how much realism comes from
+genetics and how much from good stochastic rules.
+
+\subsection{Two stages, two kinds of randomness}
+The model follows the design principle \emph{structure first, dynamics second}.
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Bud formation} is seeded per \emph{plant}. Every bud on a plant has
+  exactly the same structure, and two plants of one species differ.
+  A stochastic cellular automaton decides petal count, placement and outline,
+  and a smooth energy packs thick petals into a closed bud.
+\item \textbf{Flowering} is seeded per \emph{flower}. A Markov chain on each
+  petal's geometry opens the bud, so flowers on one plant are siblings rather
+  than clones: same structure, slightly different petals.
+\item \textbf{Colour} (future) places each petal or petal region on the
+  parameter axis of the logistic map. Petals in a stable regime look the same
+  in every flower; petals near a bifurcation amplify small differences.
+\end{enumerate}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  node distance=5mm and 7mm,
+  box/.style={draw, rounded corners, align=center, font=\small, minimum height=10mm, text width=24mm},
+  seed/.style={box, fill=gray!10},
+  arr/.style={-{Stealth}, thick}]
+\node[seed] (ps) {plant seed\\\texttt{u64}};
+\node[box, right=of ps] (tr) {traits\\from species};
+\node[box, right=of tr] (sh) {nested\\shells};
+\node[box, right=of sh] (ca) {shell\\automaton};
+\node[box, below=of ca] (sht) {thick\\sheets};
+\node[box, left=of sht] (pk) {packing\\energy};
+\node[box, left=of pk] (bud) {packed bud\\(frame 0)};
+\node[seed, below=of bud] (fs) {flower seed\\plant + index};
+\node[box, right=of fs, draw=planned, dashed] (mk) {Markov\\opening};
+\node[box, right=of mk, draw=planned, dashed] (col) {logistic-map\\colour};
+\draw[arr] (ps) -- (tr);
+\draw[arr] (tr) -- (sh);
+\draw[arr] (sh) -- (ca);
+\draw[arr] (ca) -- (sht);
+\draw[arr] (sht) -- (pk);
+\draw[arr] (pk) -- (bud);
+\draw[arr] (bud) -- (mk);
+\draw[arr] (fs) -- (mk);
+\draw[arr] (mk) -- (col);
+\end{tikzpicture}
+\caption{The pipeline. Solid boxes are built; dashed boxes are designed only.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Why shells and sheets, not voxels}
+An early idea was to grow petals as voxel sheets inside an egg-shaped volume.
+Petals are thin surfaces, so a voxel grid would spend almost all of its cells on
+empty space, and packing tens or hundreds of thin petals would need a very fine
+grid. The model instead uses:
+\begin{itemize}[leftmargin=*]
+\item \emph{nested shells}: one thin egg-shaped surface per petal layer, on
+  which a 2D automaton runs cheaply (\cref{sec:shells,sec:ca});
+\item \emph{thick spline sheets}: each petal is a smooth mid-surface plus a
+  capped thickness, so cost scales with the number of petals, not with grid
+  resolution (\cref{sec:sheets});
+\item \emph{a differentiable energy}: every packing cost is smooth, so exact
+  gradients drive the petals into a tight, folded fit (\cref{sec:packing}).
+  Differentiability also means rule settings could later be fitted to photos
+  or scans of real flowers.
+\end{itemize}
+Discrete decisions (how many petals, which layer) stay in the automaton; the
+continuous geometry is all differentiable.
+
+\subsection{Code layout}
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+Path & Contents \\
+\midrule
+\src{core/} & Rust core: seeds, shells, automaton, sheets, packing, JSON export \\
+\src{wasm/} & Browser build of the core \\
+\src{checks/} & Seed determinism tests and golden digests \\
+\src{viewer/} & TypeScript and three.js viewer, glTF export \\
+\src{prototype-python/} & The original 2D Python prototype \\
+\src{docs/} & This document \\
+\bottomrule
+\end{tabular}
+\end{center}
