@@ -21,8 +21,10 @@ engine, including the browser build. Three rules make that true.
 
 \subsection{How it is checked}
 \begin{itemize}[leftmargin=*]
-\item The canonical output for a seed is the flower JSON of the peony preset
-  with default settings (\texttt{grow\_bud\_json}).
+\item The canonical output for a seed is the flower JSON of flower 0, with
+  the peony preset and default settings (\texttt{grow\_bud\_json(seed, 0)}).
+  The check grows its seeds on parallel threads, one bud per thread; a bud
+  itself is single-threaded, so this cannot change its bits.
 \item \src{checks/golden/digests.txt} holds a SHA-256 of that output for eight
   reference seeds, chosen to cover small, large and bit-pattern values: 0, 1,
   2, 7, 42, 1234, \texttt{0xDEADBEEF} and $2^{64}-1$.

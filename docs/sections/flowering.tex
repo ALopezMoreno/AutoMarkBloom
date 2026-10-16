@@ -1,15 +1,14 @@
 \section{Flowering: the per-flower Markov chain}\label{sec:flowering}
-\stagebox{\statuspaused. Only the 2D Python prototype exists.}{\src{prototype-python/automark_bloom/petal_markov.py} (prototype); 3D core not started}
+\stagebox{\statusprogress. The 3D stage is being built; the 2D Python prototype exists.}{\src{prototype-python/automark_bloom/petal_markov.py} (prototype); 3D core in progress}
 
 Flowering takes over once the bud structure is fixed. Each growth step depends
-probabilistically on the previous state, a semi-random walk, and each flower
-draws from its own stream (key $1000+i$ for flower $i$,
-\cref{sec:seeds}). Flowers on one plant therefore share their bud and their
-targets but take different paths: siblings, not clones.
+probabilistically on the previous state, and each flower draws from its own
+seed (\cref{sec:seeds}). Siblings already differ in their buds
+(\cref{sec:tiers}); the opening adds its own noise on top.
 
-Andres has put building the 3D flowering stage on hold. This section records
-the prototype that exists and the approved design, and will be rewritten when
-the code lands.
+The 3D flowering stage is now being built. Until it lands, this section
+records the prototype that exists and the approved design; it will be
+rewritten when the code is merged.
 
 \subsection{The prototype (2D, discrete)}
 \paragraph{State.} Each petal carries three bin indices: length $\lambda$ (14 bins,
@@ -112,27 +111,57 @@ how they curl, as well as through their layer and their contacts.
 petal's packed sheet and its latent quantities (\cref{sec:tiers}): growth
 potentials, shape tendencies, timing and fixed type.
 
-\subsection{Input-agnostic machinery}\label{sec:channels}
+\subsection{Latent channels}\label{sec:channels}
+\stagebox{\statusbuilt{} for the channel store and the bud's channels; the opening stepper is \statusplanned}{\src{core/src/channels.rs}, \src{core/src/latents.rs}}
+
 New latent quantities, such as colour gradients for the logistic-map stage
 (\cref{sec:colour}), must be addable without modifying the opening machinery.
-The design does this with generic \emph{channels}:
+Every latent quantity is therefore a generic \emph{channel}:
 \begin{itemize}[leftmargin=*]
-\item A channel is a named per-petal (or per-flower) quantity with a value, a
-  target, a noise specification and an update rule from a small set of kinds:
-  monotone growth toward a target, mean-reverting drift, or fixed. The stepper
-  loops over channels without knowing what any of them mean.
-\item Channels the geometry uses feed the relaxation step through one mapping
-  layer. A channel the geometry ignores, such as colour, simply evolves and is
-  exported.
-\item Each channel draws from its own random sub-stream derived from its name,
-  so adding a channel never shifts the draws of the others
-  (\cref{sec:seeds}).
-\item The flower JSON carries channels generically, per point or per petal and
-  per frame, which fits the optional \texttt{color} field already planned in
-  the format.
+\item A channel is declared once with a name, a scope (point, petal or
+  flower), a number of dimensions, an optional range and a kind: \emph{fixed}
+  (never changes), \emph{target} (a goal a growth quantity moves toward) or
+  \emph{state} (updated by the stage that owns it). Categorical channels also
+  carry value labels. Consumers look channels up by name and the machinery
+  never knows what one means.
+\item Each channel draws from its own random sub-stream keyed by a hash of its
+  name (\cref{sec:seeds}), so adding a channel never shifts the draws of the
+  others. A test checks this.
+\item The flower JSON carries the declarations and the values generically
+  (\cref{sec:output}).
 \end{itemize}
-Adding a channel means declaring it and, if needed, its consumer. The stepper,
-the random streams and the export format stay unchanged.
+
+\paragraph{What the bud hands over.} With $\delta_j\in[0,1]$ the petal's depth
+in the bud (0 innermost layer, 1 outermost), $n$ the plant's
+\texttt{latent\_noise}, $\xi\sim\Norm(0,1)$ from the channel's own stream, and
+``noisy'' meaning $x(1 + n\,\xi)$:
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l l l X@{}}
+\toprule
+Channel & Scope & Kind & Value \\
+\midrule
+\texttt{target\_length} & petal & target & noisy size potential $\times$ (0.5 + fraction of shell rows its patch reached) \\
+\texttt{target\_width} & petal & target & noisy size potential $\times$ (0.3 + widest row in cells / 24) \\
+\texttt{edge\_growth} & petal & target & noisy \texttt{edge\_boost} \\
+\texttt{cup} & petal & target & noisy blend from \texttt{cup\_inner} to \texttt{cup\_outer} by depth, in $[0,1]$ \\
+\texttt{base\_fold} & petal & target & noisy blend from \texttt{fold\_inner} to \texttt{fold\_outer} by depth, in $[0,1]$ \\
+\texttt{onset} & petal & fixed & $\texttt{onset\_spread}\,(1-\delta_j) + 0.05\,\xi$, in $[0,1]$; outer petals open first \\
+\texttt{bud\_growth} & petal & state & mean accumulated growth $S$ of the petal's nodes \\
+\texttt{petal\_type} & petal & fixed & flat, cupped or rolled, by the species weights \\
+\texttt{twist} & petal & fixed & $+1$ (clockwise) or $-1$ \\
+\texttt{vigour} & flower & fixed & the flower's vigour $\nu$ \\
+\texttt{sepal\_radius} & flower & state & envelope radius $R$ at the end of the bud stage \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{How the opening will use them (design).} Each channel kind gets an
+update rule from a small set (monotone growth toward a target, mean-reverting
+drift, fixed), and the stepper loops over channels without knowing what they
+mean. Channels the geometry uses feed the relaxation step through one mapping
+layer; a channel the geometry ignores, such as colour, simply evolves and is
+exported. Adding a channel means declaring it and, if needed, its consumer. The
+stepper, the random streams and the export format stay unchanged.
 
 \paragraph{Ideas still to fold in} from the original design notes: phyllotactic
 spiral angle and petals growing larger outward.
