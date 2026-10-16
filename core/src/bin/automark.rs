@@ -1,4 +1,4 @@
-//! automark --seed N --json out.json [--species species.json] [--iterations N]
+//! automark --seed N --json out.json [--species species.json] [--relax N] [--frames]
 
 use automark_core::{export, grow_bud, PackSettings, PlantSeed, Species};
 use std::process::exit;
@@ -17,6 +17,7 @@ fn main() {
         })
     };
     while i < args.len() {
+        let mut step = 2;
         match args[i].as_str() {
             "--seed" => seed = Some(value(i).parse().expect("--seed takes a u64")),
             "--json" => json = Some(value(i).to_string()),
@@ -24,23 +25,27 @@ fn main() {
                 let text = std::fs::read_to_string(value(i)).expect("read species file");
                 species = Species::from_json(&text).expect("parse species file");
             }
-            "--iterations" => settings.iterations = value(i).parse().expect("--iterations takes a number"),
+            "--relax" => settings.relax_iterations = value(i).parse().expect("--relax takes a number"),
+            "--frames" => {
+                settings.record_frames = true;
+                step = 1;
+            }
             other => {
-                eprintln!("unknown argument {other}\nusage: automark --seed N --json out.json [--species file.json] [--iterations N]");
+                eprintln!("unknown argument {other}\nusage: automark --seed N --json out.json [--species file.json] [--relax N] [--frames]");
                 exit(2);
             }
         }
-        i += 2;
+        i += step;
     }
     let Some(seed) = seed else {
-        eprintln!("usage: automark --seed N --json out.json [--species file.json] [--iterations N]");
+        eprintln!("usage: automark --seed N --json out.json [--species file.json] [--relax N] [--frames]");
         exit(2);
     };
     let bud = grow_bud(PlantSeed(seed), &species, &settings);
     let r = &bud.report;
     eprintln!(
-        "{} seed {}: {} layers, {} petals, energy {:.3} -> {:.3}, max overlap {:.3}t, max slot excess {:.3}t",
-        species.name, seed, bud.traits.layers, r.petals, r.start.total(), r.end.total(), r.max_overlap, r.max_band_excess
+        "{} seed {}: {} layers, {} petals, {} stages, growth mean {:.2} max {:.2}, envelope {:.2} -> {:.2}, max overlap {:.3}t, max band excess {:.3}t",
+        species.name, seed, bud.traits.layers, r.petals, r.stages, r.mean_growth, r.max_growth, r.envelope_start, r.envelope_end, r.max_overlap, r.max_band_excess
     );
     if let Some(path) = json {
         std::fs::write(&path, export::flower_json(&bud)).expect("write JSON");

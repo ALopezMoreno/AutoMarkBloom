@@ -1,9 +1,9 @@
-use automark_core::energy::Terms;
+use automark_core::energy::{Envelope, Terms};
 use automark_core::pack::build_system;
 use automark_core::{export, grow_bud, PackSettings, PlantSeed, Species};
 
 fn quick() -> PackSettings {
-    PackSettings { iterations: 60, ..PackSettings::default() }
+    PackSettings::quick()
 }
 
 #[test]
@@ -44,11 +44,15 @@ fn gradient_matches_finite_differences() {
         }
     }
     let cands = sys.candidates(&x, 0.5);
+    let env = Envelope { r: bud.shells.envelope * 0.97, rest: bud.shells.envelope * 1.02 };
     let mut g = vec![[0.0; 3]; x.len()];
-    let t: Terms = sys.energy(&x, &cands, &mut g);
+    let mut genv = 0.0;
+    let t: Terms = sys.energy(&x, env, &cands, &mut g, &mut genv);
     assert!(t.band > 0.0 || t.envelope > 0.0);
     let mut scratch = vec![[0.0; 3]; x.len()];
+    let mut sg = 0.0;
     let h = 1e-6;
+    let mut e = |x: &[[f64; 3]], env: Envelope| sys.energy(x, env, &cands, &mut scratch, &mut sg).total();
     let mut worst: f64 = 0.0;
     for k in 0..60 {
         let i = (k * 7919) % x.len();
@@ -57,10 +61,13 @@ fn gradient_matches_finite_differences() {
         xp[i][c] += h;
         let mut xm = x.clone();
         xm[i][c] -= h;
-        let fd = (sys.energy(&xp, &cands, &mut scratch).total() - sys.energy(&xm, &cands, &mut scratch).total()) / (2.0 * h);
+        let fd = (e(&xp, env) - e(&xm, env)) / (2.0 * h);
         let err = (fd - g[i][c]).abs() / (1.0 + g[i][c].abs());
         worst = worst.max(err);
     }
+    // The envelope radius is a variable too.
+    let fd = (e(&x, Envelope { r: env.r + h, ..env }) - e(&x, Envelope { r: env.r - h, ..env })) / (2.0 * h);
+    worst = worst.max((fd - genv).abs() / (1.0 + genv.abs()));
     assert!(worst < 1e-4, "worst relative gradient error {worst}");
 }
 
@@ -95,4 +102,19 @@ fn species_round_trips_through_json() {
     let s = Species::peony();
     let text = serde_json::to_string(&s).unwrap();
     assert_eq!(Species::from_json(&text).unwrap(), s);
+}
+
+#[test]
+fn development_frames_keep_topology() {
+    let settings = PackSettings { record_frames: true, ..PackSettings::quick() };
+    let bud = grow_bud(PlantSeed(7), &Species::peony(), &settings);
+    assert_eq!(bud.frames.len(), bud.traits.growth_stages + 1);
+    let v: serde_json::Value = serde_json::from_str(&export::flower_json(&bud)).unwrap();
+    let frames = v["frames"].as_array().unwrap();
+    assert_eq!(frames.first().unwrap()["t"], -1.0);
+    assert_eq!(frames.last().unwrap()["t"], 0.0);
+    let n = v["petals"].as_array().unwrap().len();
+    for f in frames {
+        assert_eq!(f["petals"].as_array().unwrap().len(), n);
+    }
 }

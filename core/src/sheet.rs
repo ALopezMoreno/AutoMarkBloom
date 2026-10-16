@@ -12,8 +12,8 @@ use crate::shells::Shells;
 use crate::traits::PlantTraits;
 use std::f64::consts::{PI, TAU};
 
-pub const NU: usize = 7;
-pub const NV: usize = 11;
+pub const NU: usize = 11;
+pub const NV: usize = 19;
 
 #[derive(Clone, Debug)]
 pub struct Sheet {
