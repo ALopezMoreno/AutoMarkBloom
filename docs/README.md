@@ -5,6 +5,12 @@ implemented in the code. Build it with `make` in this folder (needs `latexmk`
 and TeX Live with `latex-extra`); CI builds the PDF on every push and pull
 request and attaches it as the `automark-docs` artifact.
 
+`make html` (needs pandoc) writes `build/automark.html`, a phone-friendly page
+with the same content: `web/flatten.py` flattens the LaTeX and renders each
+TikZ figure to SVG, pandoc converts the text, and `web/build.py` fills
+`web/page.tpl.html`. Maths is typeset in the browser by MathJax. This page is
+what gets published as the readable web version.
+
 | File | Stage |
 |---|---|
 | `sections/status.tex` | Which stages are built, being reworked or only designed |
@@ -18,6 +24,7 @@ request and attaches it as the `automark-docs` artifact.
 | `sections/flowering.tex` | Per-flower Markov chain |
 | `sections/colour.tex` | Logistic-map colour |
 | `sections/determinism.tex` | Same seed, same flower on every platform |
+| `sections/future.tex` | Deferred rules and future design goals |
 | `macros.tex` | Shared notation and the sync date and commit |
 
 ## Keeping it in sync
