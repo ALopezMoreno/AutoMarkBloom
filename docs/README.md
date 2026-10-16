@@ -18,6 +18,7 @@ request and attaches it as the `automark-docs` artifact.
 | `sections/flowering.tex` | Per-flower Markov chain |
 | `sections/colour.tex` | Logistic-map colour |
 | `sections/determinism.tex` | Same seed, same flower on every platform |
+| `sections/future.tex` | Deferred rules and future design goals |
 | `macros.tex` | Shared notation and the sync date and commit |
 
 ## Keeping it in sync
