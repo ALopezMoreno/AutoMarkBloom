@@ -66,7 +66,33 @@ export interface FlowerDoc {
 }
 
 /** Throws with a readable message if `d` does not match the contract. Unknown fields are ignored. */
+/** Decode base64 little-endian int16s, times `step`. */
+function int16s(b64: string, step: number): number[] {
+  const bin = atob(b64);
+  const out = new Array<number>(bin.length >> 1);
+  for (let i = 0; i < out.length; i++) {
+    const v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
+    out[i] = (v >= 0x8000 ? v - 0x10000 : v) * step;
+  }
+  return out;
+}
+
+/** Samples packed by scripts/pack_sample.py store `mid`/`thick` as int16; expand them in place. */
+function unpack(d: any) {
+  const pk = d?.packing;
+  if (!pk?.int16 || !Array.isArray(d.frames)) return;
+  for (const f of d.frames)
+    for (const p of f.petals ?? []) {
+      if (typeof p.mid_i16 === "string") p.mid = int16s(p.mid_i16, pk.mid_step);
+      if (typeof p.thick_i16 === "string") p.thick = int16s(p.thick_i16, pk.thick_step);
+      delete p.mid_i16;
+      delete p.thick_i16;
+    }
+  delete d.packing;
+}
+
 export function validate(d: any): FlowerDoc {
+  unpack(d);
   const fail = (m: string): never => {
     throw new Error(`Not a valid automark-flower document: ${m}`);
   };
