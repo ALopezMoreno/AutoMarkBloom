@@ -15,11 +15,18 @@
 //! 5. `latents`: per-petal and per-flower quantities for the opening stage,
 //!    as named `channels`.
 //!
+//! Stage 2 (opening), `bloom`: a Markov chain over the whole flower. Each
+//! step evolves a set of named channels by declared rules (fixed, drifting
+//! noise, windowed growth), turns the geometry channels into a pose per
+//! petal and relaxes the petals against each other. The channel program is
+//! data, so new latents (colour, ...) need no change to the machinery.
+//!
 //! Variation has three tiers: species (rules and ranges, `species`), plant
 //! (heritable trait values, seeded by the plant seed) and flower (vigour,
 //! layer jitter, and its own run of everything above, seeded per flower).
 //! Output is the shared flower JSON (`export::flower_json`).
 
+pub mod bloom;
 pub mod ca;
 pub mod channels;
 pub mod energy;

@@ -53,3 +53,59 @@ the bits are the same. Golden digests are unchanged on native and wasm.
 |---|---|---|
 | native | 15.1 s | 8.5 s |
 | wasm (Node) | 28.8 s | 11.8 s |
+
+## Opening (stage 2)
+
+Seed 11 flower 0, 24 frames, measured natively:
+
+- **Per-node masses don't help the opening.** With the bud's preconditioning applied to the
+  opening's FIRE, the opening took 45–60 s instead of 41 s, and final energy didn't improve.
+  The opening isn't stiffness-bound. Each frame warm-starts from the previous one moved by the
+  change in pose, and energy plateaus where the pose tether, bending and contact disagree.
+  Larger steps only caused more contact rebuilds.
+- **Contact rebuilds are about two thirds of the opening's time.** There are about 290
+  rebuilds at about 65 ms each, roughly 800k exact sample-triangle tests per rebuild. Binning
+  triangles into a finer dense grid and adding a bounding-sphere pre-test both gave identical
+  candidates at the same speed. The nearby pairs are genuinely near, so what costs is the
+  number of rebuilds.
+- **Fewer iterations.** Energy has settled well before 120 iterations, so the default is now
+  60 iterations with `dt_max` 0.06:
+
+| Opening relax settings | time | final energy | final max overlap |
+|---|---|---|---|
+| 120 iterations, dt_max 0.03 (old) | 41.4 s | 308.6 | 0.74 t |
+| **60, 0.06 (new default)** | **27.2 s** | **313.8** | **0.68 t** |
+| 40, 0.1 | 23.8 s | 308.6 | 0.74 t (worst 0.78 t) |
+- **Per-petal contact refresh.** Contact pairs are now refreshed only for petals that moved
+  more than half the Verlet skin, together with any petal that moved more than a quarter of
+  it, so refreshes come in batches. Kept pairs stay exact because their two petals have
+  together moved less than the skin. Output is byte-identical. Seed 11 from bud to open went
+  from 47 s to 42.5 s. Widening the skin or changing the batching threshold made no
+  difference, so what's left is mostly the energy evaluations themselves.
+- **Continuous settle.** FIRE's velocity and step size now carry over from one frame to the
+  next (`RelaxSettings::carry`), so the flower keeps moving as it grows instead of starting
+  from rest every frame. That lets each frame settle in 20 iterations instead of 60. Seed 11
+  on the retuned bud (#20, #22):
+
+| Opening settle | whole flower | final max overlap | change from 60 iterations (RMS / max) |
+|---|---|---|---|
+| 60 iterations, restarting each frame (old) | 53 s | 0.60 t | — |
+| 60, carried over | 55 s | 0.70 t | 0.39 t / 3.0 t |
+| **20, carried over (new default)** | **39 s** | **0.62 t** | **0.52 t / 3.4 t** |
+| 10, carried over | 33 s | 0.85 t | 0.68 t / 4.8 t |
+| no settling, pose only | 21 s | 0.91 t | 1.00 t / 11.9 t |
+
+  The 60-iteration carried-over row shows the solver's own noise: about 0.4 t RMS. At 20
+  iterations the change is barely above that, and every layer's opening angle and incurve
+  is unchanged. Blending the targets over several settling steps within a frame didn't help.
+- **Exact contact skip and a wider skin** (from the Performance thread's bud-side #23). Each
+  contact pair stores a lower bound on its distance with every node at its anchor. Energy
+  skips a pair while that bound, less how far its nodes have since moved, is still at least
+  the contact distance. With most pairs skipped, a skin of 1.0 cap (was 0.5) costs little
+  and means fewer refreshes. Output is byte-identical. Seed 11 from seed to open went from
+  39 s to 35 s. A skin of 1.5 cap gave the same time, and 2.0 cap was slower.
+- **Faster contact search** (from the Performance thread). The refresh now uses flat
+  counting-sort grids instead of a BTreeMap, works out each node's movement once, skips
+  triangles whose plane is beyond reach, and merges new pairs into the kept ones instead of
+  re-sorting. Output is byte-identical (checked on seeds 11 and 2027). Seed 11 from seed to
+  open went from 35 s to 29 s.

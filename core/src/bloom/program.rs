@@ -1,0 +1,82 @@
+//! The opening program: which channels exist and how each evolves.
+//!
+//! This table is data. The stepper (`channels`) runs any table, and the
+//! geometry consumer (`consume`) reads only the channel names listed in its
+//! own docs. A species can swap this table for its own (it serializes as
+//! JSON), and new channels such as colour gradients are added here or
+//! handed over by the bud without touching either.
+
+use super::channels::{ChannelSpec, Param, Rule, Scope};
+use crate::species::Species;
+
+/// How long one petal takes to open, as a fraction of the opening.
+pub const OPEN_DURATION: f64 = 0.55;
+
+/// Growth toward gain * target + bias (a constant or a channel), on the petal's own clock and rate.
+fn growth(target: &str, gain: f64, bias: impl Into<Param>, monotone: bool) -> Rule {
+    Rule::Growth {
+        target: Param::Channel(target.into()),
+        gain: gain.into(),
+        bias: bias.into(),
+        rate: "rate".into(),
+        onset: "onset".into(),
+        duration: OPEN_DURATION.into(),
+        monotone,
+    }
+}
+
+/// A per-layer species setting: inner + (outer - inner) * layer_depth^profile.
+fn by_layer(pair: [f64; 2], profile: f64) -> Rule {
+    Rule::Derived { from: "layer_depth".into(), gain: (pair[1] - pair[0]).into(), bias: pair[0].into(), power: profile.into() }
+}
+
+/// Default opening program (single-opening flowers), with the species'
+/// opening shape.
+pub fn default_program(species: &Species) -> Vec<ChannelSpec> {
+    let shape = &species.opening;
+    let petal = |n: &str, rule: Rule, d: f64| ChannelSpec::new(n, Scope::Petal, 1, rule, vec![d]);
+    vec![
+        // Bud latents (see `latents`). The bud supplies these; the defaults
+        // only apply if it does not. Lengths and widths are ratios to the
+        // bud petal; cup and base_fold run 0..1; twist is a direction.
+        ChannelSpec::new("vigour", Scope::Flower, 1, Rule::Fixed, vec![1.0]).exported(),
+        petal("onset", Rule::Fixed, 0.0).exported(),
+        petal("target_length", Rule::Fixed, 1.5),
+        petal("target_width", Rule::Fixed, 1.3),
+        petal("edge_growth", Rule::Fixed, 1.0),
+        petal("cup", Rule::Fixed, 0.5),
+        petal("base_fold", Rule::Fixed, 0.3),
+        petal("twist", Rule::Fixed, 0.0),
+        // Per-petal growth rate: slow mean-reverting noise around the
+        // flower's vigour, so fast petals stay fast for a while.
+        petal("rate", Rule::Drift { mean: "vigour".into(), revert: 3.0.into(), sigma: 0.35.into() }, 1.0).exported(),
+        // Growth state, consumed by the geometry. Gains turn the bud's
+        // 0..1 latents into the consumer's units (fractions and radians);
+        // widths gain more than lengths so open petals stay broad and overlap.
+        petal("length", growth("target_length", 1.0, 0.0, true), 1.0).exported(),
+        petal("width", growth("target_width", 1.6, 0.0, true), 1.0).exported(),
+        petal("edge", growth("edge_growth", 0.25, 0.0, true), 0.0),
+        petal("cupping", growth("cup", 1.0, 0.0, false), 0.0),
+        petal("reflex", growth("base_fold", 0.6, 0.0, false), 0.0),
+        petal("asymmetry", growth("twist", 0.08, 0.0, false), 0.0),
+        // How far each petal opens: its chord turns toward the species'
+        // angle for its layer (`layer_depth`: 0 innermost, 1 outermost).
+        petal("layer_depth", Rule::Fixed, 1.0),
+        petal("splay_angle", by_layer(shape.angle, shape.profile), shape.angle[0]),
+        petal(
+            "splay",
+            Rule::Growth { target: 1.0.into(), gain: 1.0.into(), bias: 0.0.into(), rate: "rate".into(), onset: "onset".into(), duration: OPEN_DURATION.into(), monotone: true },
+            0.0,
+        ),
+        // How much of the bud's curl a petal still holds (1 = closed bud),
+        // along the petal and across it: the species' curl for its layer,
+        // plus more for cupped petals. Peony inner petals keep curving
+        // inward over the centre; guard petals lose most of it.
+        petal("curl_keep", by_layer(shape.curl, shape.profile), shape.curl[0]),
+        petal("memory", growth("cup", 0.6, "curl_keep", false), 1.0),
+        petal("wrap", growth("cup", 0.5, "curl_keep", false), 1.0),
+        // Crumples from the bud partly stretch out as the petal expands.
+        petal("ruffle_target", Rule::Fixed, 0.6),
+        petal("ruffle", growth("ruffle_target", 1.0, 0.0, false), 1.0),
+    ]
+}
