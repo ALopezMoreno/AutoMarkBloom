@@ -284,6 +284,17 @@ function markFileSource(name: string) {
   $("fullRow").style.display = "none";
 }
 
+/** Fetch a flower file; `.gz` files are gunzipped in the browser so big samples stay small to ship. */
+async function fetchText(url: string): Promise<string> {
+  $("info").textContent = `Loading ${url}…`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url}: ${r.status} ${r.statusText}`);
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  // A host may already have decoded it (Content-Encoding), so go by the gzip magic bytes, not the name.
+  if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return new TextDecoder().decode(bytes);
+  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+}
+
 async function loadJsonText(text: string, name: string) {
   try {
     if (![...sourceSel.options].some((o) => o.value !== "file" && (o.text === name || o.value === name))) markFileSource(name);
@@ -303,7 +314,7 @@ $("source").addEventListener("change", async (e) => {
   $("fullRow").style.display = v === "core" ? "" : "none";
   if (seeded) return loadSeed($<HTMLInputElement>("seed").value);
   try {
-    loadJsonText(await (await fetch(v)).text(), sourceSel.selectedOptions[0].text);
+    loadJsonText(await fetchText(v), sourceSel.selectedOptions[0].text);
   } catch (err) {
     $("err").textContent = String(err);
   }
@@ -399,7 +410,7 @@ const src = q.get("src");
 if (src) {
   const opt = [...$<HTMLSelectElement>("source").options].find((o) => o.value === src);
   if (opt) { sourceSel.value = src; $("seedRow").style.display = "none"; $("flowerRow").style.display = "none"; $("fullRow").style.display = "none"; }
-  fetch(src).then((r) => r.text()).then((t) => loadJsonText(t, src)).catch((e) => ($("err").textContent = String(e)));
+  fetchText(src).then((t) => loadJsonText(t, src)).catch((e) => ($("err").textContent = String(e)));
 } else {
   const seed = q.get("seed") ?? "7";
   $<HTMLInputElement>("seed").value = seed;
