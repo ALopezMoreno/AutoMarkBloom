@@ -12,7 +12,6 @@
 
 use crate::energy::closest_on_triangle;
 use crate::math;
-use std::collections::BTreeMap;
 
 /// A point on a petal: four nodes and their bilinear weights.
 #[derive(Clone, Copy, Debug)]
@@ -102,23 +101,66 @@ impl Contacts {
     /// distance minus how far its nodes are from their anchors, a lower
     /// bound on the distance at the anchors.
     pub fn refresh(&mut self, x: &[[f64; 3]], reach: f64, dirty: &[bool], anchor: &[[f64; 3]]) {
-        let moved = |v: usize| norm(sub(x[v], anchor[v]));
-        let cell = 0.25f64.max(reach);
-        let key = |v: f64| math::floor(v / cell) as i64;
-        // Every sample, for the dirty petals' triangles; only the dirty
-        // petals' samples, for the other triangles.
-        let mut grid: BTreeMap<(i64, i64, i64), Vec<usize>> = BTreeMap::new();
-        let mut dirty_grid: BTreeMap<(i64, i64, i64), Vec<usize>> = BTreeMap::new();
-        let pts: Vec<[f64; 3]> = self.samples.iter().map(|s| s.at(x)).collect();
-        for (i, p) in pts.iter().enumerate() {
-            let k = (key(p[0]), key(p[1]), key(p[2]));
-            if dirty[self.samples[i].petal] {
-                dirty_grid.entry(k).or_default().push(i);
-            }
-            grid.entry(k).or_default().push(i);
+        if self.samples.is_empty() {
+            return;
         }
+        let moved: Vec<f64> = x.iter().zip(anchor).map(|(p, q)| norm(sub(*p, *q))).collect();
+        let pts: Vec<[f64; 3]> = self.samples.iter().map(|s| s.at(x)).collect();
+        let mut lo0 = [f64::MAX; 3];
+        let mut hi0 = [f64::MIN; 3];
+        for p in &pts {
+            for k in 0..3 {
+                lo0[k] = lo0[k].min(p[k]);
+                hi0[k] = hi0[k].max(p[k]);
+            }
+        }
+        let extent = (0..3).map(|k| hi0[k] - lo0[k]).fold(0.0, f64::max);
+        let mut cell = reach.max(extent / 96.0).max(1e-9);
+        let dims = |cell: f64| [0, 1, 2].map(|k| math::floor((hi0[k] - lo0[k]) / cell) as usize + 1);
+        while dims(cell).iter().product::<usize>() > 4 * pts.len() + 64 {
+            cell *= 1.5;
+        }
+        let n = dims(cell);
+        let key = |v: f64, k: usize| math::floor((v - lo0[k]) / cell);
+        let cell_of = |p: &[f64; 3]| {
+            let c = [0, 1, 2].map(|k| key(p[k], k) as usize);
+            (c[2] * n[1] + c[1]) * n[0] + c[0]
+        };
+        let cells: Vec<usize> = pts.iter().map(cell_of).collect();
+        // Counting sort of the chosen samples into cells (sample order kept
+        // within a cell): cell starts, sample indices, positions, petals.
+        let bin = |take: &dyn Fn(usize) -> bool| {
+            let mut start = vec![0usize; n[0] * n[1] * n[2] + 1];
+            for (i, &c) in cells.iter().enumerate() {
+                if take(i) {
+                    start[c + 1] += 1;
+                }
+            }
+            for c in 1..start.len() {
+                start[c] += start[c - 1];
+            }
+            let mut fill = start.clone();
+            let mut order = vec![0usize; start[start.len() - 1]];
+            for (i, &c) in cells.iter().enumerate() {
+                if take(i) {
+                    order[fill[c]] = i;
+                    fill[c] += 1;
+                }
+            }
+            let p: Vec<[f64; 3]> = order.iter().map(|&i| pts[i]).collect();
+            let pet: Vec<usize> = order.iter().map(|&i| self.samples[i].petal).collect();
+            (start, order, p, pet)
+        };
+        let full = bin(&|_| true);
+        let only_dirty = bin(&|i| dirty[self.samples[i].petal]);
+        let range = |lo: f64, hi: f64, k: usize| {
+            let a = key(lo, k).max(0.0) as usize;
+            let b = (key(hi, k).max(0.0) as usize).min(n[k] - 1);
+            a..=b
+        };
         let mut out = Vec::new();
         for (ti, &[a, b, c]) in self.tris.iter().enumerate() {
+            let owner = self.tri_petal[ti];
             let mut lo = [f64::MAX; 3];
             let mut hi = [f64::MIN; 3];
             for v in [a, b, c] {
@@ -127,34 +169,67 @@ impl Contacts {
                     hi[k] = hi[k].max(x[v][k] + reach);
                 }
             }
-            let owner = self.tri_petal[ti];
-            let grid = if dirty[owner] { &grid } else { &dirty_grid };
-            for gx in key(lo[0])..=key(hi[0]) {
-                for gy in key(lo[1])..=key(hi[1]) {
-                    for gz in key(lo[2])..=key(hi[2]) {
-                        let Some(list) = grid.get(&(gx, gy, gz)) else { continue };
-                        for &i in list {
-                            let p = pts[i];
-                            if self.samples[i].petal == owner || !(0..3).all(|k| p[k] >= lo[k] && p[k] <= hi[k]) {
+            if (0..3).any(|k| hi[k] < lo0[k] || lo[k] > hi0[k]) {
+                continue;
+            }
+            let (start, order, spts, spet) = if dirty[owner] { &full } else { &only_dirty };
+            let mt = moved[a].max(moved[b]).max(moved[c]);
+            // Distance to the triangle is at least distance to its plane.
+            let (e1, e2) = (sub(x[b], x[a]), sub(x[c], x[a]));
+            let nrm = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+            let nl = norm(nrm);
+            let plane = nl > 1e-12 * (norm(e1) * norm(e2)).max(1e-300);
+            let nh = if plane { [nrm[0] / nl, nrm[1] / nl, nrm[2] / nl] } else { [0.0; 3] };
+            let far = reach + 1e-9 * (1.0 + reach);
+            for gz in range(lo[2], hi[2], 2) {
+                for gy in range(lo[1], hi[1], 1) {
+                    let row = (gz * n[1] + gy) * n[0];
+                    let xs = range(lo[0], hi[0], 0);
+                    for j in start[row + xs.start()]..start[row + xs.end() + 1] {
+                        let sp = spet[j];
+                        if sp == owner {
+                            continue;
+                        }
+                        let p = spts[j];
+                        if !(0..3).all(|k| p[k] >= lo[k] && p[k] <= hi[k]) {
+                            continue;
+                        }
+                        if plane {
+                            let ap = sub(p, x[a]);
+                            if (ap[0] * nh[0] + ap[1] * nh[1] + ap[2] * nh[2]).abs() > far {
                                 continue;
                             }
-                            let w = closest_on_triangle(p, x[a], x[b], x[c]);
-                            let q = [0, 1, 2].map(|k| w[0] * x[a][k] + w[1] * x[b][k] + w[2] * x[c][k]);
-                            let d = norm(sub(p, q));
-                            if d < reach {
-                                let ms = self.samples[i].nodes.iter().map(|&v| moved(v)).fold(0.0, f64::max);
-                                let mt = [a, b, c].iter().map(|&v| moved(v)).fold(0.0, f64::max);
-                                out.push((i, ti, d - ms - mt));
-                            }
+                        }
+                        let w = closest_on_triangle(p, x[a], x[b], x[c]);
+                        let q = [0, 1, 2].map(|k| w[0] * x[a][k] + w[1] * x[b][k] + w[2] * x[c][k]);
+                        let d = norm(sub(p, q));
+                        if d < reach {
+                            let i = order[j];
+                            let ms = self.samples[i].nodes.iter().map(|&v| moved[v]).fold(0.0, f64::max);
+                            out.push((i, ti, d - ms - mt));
                         }
                     }
                 }
             }
         }
+        out.sort_unstable_by_key(|&(si, ti, _)| (si, ti));
+        // Kept pairs are already sorted, and never coincide with new ones
+        // (a new pair has a dirty petal, a kept one has none): merge.
         let samples = &self.samples;
         let tri_petal = &self.tri_petal;
-        out.extend(self.cands.iter().zip(&self.bound).filter(|(&(si, ti), _)| !dirty[samples[si].petal] && !dirty[tri_petal[ti]]).map(|(&(si, ti), &b)| (si, ti, b)));
-        out.sort_unstable_by_key(|&(si, ti, _)| (si, ti));
+        let kept: Vec<(usize, usize, f64)> = self.cands.iter().zip(&self.bound).filter(|(&(si, ti), _)| !dirty[samples[si].petal] && !dirty[tri_petal[ti]]).map(|(&(si, ti), &b)| (si, ti, b)).collect();
+        let mut merged = Vec::with_capacity(out.len() + kept.len());
+        let (mut i, mut j) = (0, 0);
+        while i < out.len() || j < kept.len() {
+            if j == kept.len() || (i < out.len() && (out[i].0, out[i].1) < (kept[j].0, kept[j].1)) {
+                merged.push(out[i]);
+                i += 1;
+            } else {
+                merged.push(kept[j]);
+                j += 1;
+            }
+        }
+        let out = merged;
         self.cands = out.iter().map(|&(si, ti, _)| (si, ti)).collect();
         self.bound = out.iter().map(|&(_, _, b)| b).collect();
     }

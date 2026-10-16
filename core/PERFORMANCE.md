@@ -89,3 +89,8 @@ Seed 11 flower 0, 24 frames, measured natively:
   the contact distance. With most pairs skipped, a skin of 1.0 cap (was 0.5) costs little
   and means fewer refreshes. Output is byte-identical. Seed 11 from seed to open went from
   39 s to 35 s. A skin of 1.5 cap gave the same time, and 2.0 cap was slower.
+- **Faster contact search** (from the Performance thread). The refresh now uses flat
+  counting-sort grids instead of a BTreeMap, works out each node's movement once, skips
+  triangles whose plane is beyond reach, and merges new pairs into the kept ones instead of
+  re-sorting. Output is byte-identical (checked on seeds 11 and 2027). Seed 11 from seed to
+  open went from 35 s to 29 s.
