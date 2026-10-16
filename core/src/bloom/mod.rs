@@ -70,11 +70,20 @@ pub fn flower_seed(bud: &Bud, flower_index: u64) -> u64 {
 }
 
 /// The bud's channels (`Bud::channels`) as opening inputs. Every channel
-/// the bud declares comes through by name, whatever it is.
+/// the bud declares comes through by name, whatever it is, plus each
+/// petal's `layer_depth` (0 innermost layer, 1 outermost).
 pub fn bud_inputs(bud: &Bud) -> Vec<Input> {
     use crate::channels::Scope as S;
     let petals = bud.sheets.len();
-    bud.channels
+    let top = bud.sheets.iter().map(|s| s.layer).max().unwrap_or(0).max(1) as f64;
+    let depth = Input {
+        name: "layer_depth".into(),
+        scope: Scope::Petal,
+        dims: 1,
+        values: bud.sheets.iter().map(|s| vec![s.layer as f64 / top]).collect(),
+        labels: None,
+    };
+    let mut inputs: Vec<Input> = bud.channels
         .decls
         .iter()
         .map(|d| {
@@ -89,7 +98,11 @@ pub fn bud_inputs(bud: &Bud) -> Vec<Input> {
             };
             Input { name: d.name.clone(), scope, dims: d.dims, values, labels: d.labels.clone() }
         })
-        .collect()
+        .collect();
+    if !inputs.iter().any(|i| i.name == depth.name) {
+        inputs.push(depth);
+    }
+    inputs
 }
 
 /// The bud's petals with their laid-out (pre-packing) shapes.
@@ -136,5 +149,5 @@ pub fn open_with(bud: &Bud, specs: &[ChannelSpec], inputs: &[Input], s: &BloomSe
 
 /// Open `bud` with the default program and the bud's latents.
 pub fn open_flower(bud: &Bud, s: &BloomSettings) -> Opening {
-    open_with(bud, &program::default_program(), &bud_inputs(bud), s).expect("default program is well formed")
+    open_with(bud, &program::default_program(&bud.species), &bud_inputs(bud), s).expect("default program is well formed")
 }

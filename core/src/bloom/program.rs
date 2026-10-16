@@ -7,6 +7,7 @@
 //! handed over by the bud without touching either.
 
 use super::channels::{ChannelSpec, Param, Rule, Scope};
+use crate::species::Species;
 
 /// How long one petal takes to open, as a fraction of the opening.
 pub const OPEN_DURATION: f64 = 0.55;
@@ -24,8 +25,10 @@ fn growth(target: &str, gain: f64, bias: f64, monotone: bool) -> Rule {
     }
 }
 
-/// Default opening program (peony-like, single-opening flowers).
-pub fn default_program() -> Vec<ChannelSpec> {
+/// Default opening program (single-opening flowers), with the species'
+/// opening angles.
+pub fn default_program(species: &Species) -> Vec<ChannelSpec> {
+    let [inner, outer] = species.open_angle;
     let petal = |n: &str, rule: Rule, d: f64| ChannelSpec::new(n, Scope::Petal, 1, rule, vec![d]);
     vec![
         // Bud latents (see `latents`). The bud supplies these; the defaults
@@ -49,8 +52,17 @@ pub fn default_program() -> Vec<ChannelSpec> {
         petal("width", growth("target_width", 1.6, 0.0, true), 1.0).exported(),
         petal("edge", growth("edge_growth", 0.25, 0.0, true), 0.0),
         petal("cupping", growth("cup", 1.0, 0.0, false), 0.0),
-        petal("reflex", growth("base_fold", 1.2, 0.0, false), 0.0),
+        petal("reflex", growth("base_fold", 0.6, 0.0, false), 0.0),
         petal("asymmetry", growth("twist", 0.08, 0.0, false), 0.0),
+        // How far each petal opens: its chord turns toward the species'
+        // angle for its layer (`layer_depth`: 0 innermost, 1 outermost).
+        petal("layer_depth", Rule::Fixed, 1.0),
+        petal("splay_angle", Rule::Derived { from: "layer_depth".into(), gain: (outer - inner).into(), bias: inner.into() }, inner),
+        petal(
+            "splay",
+            Rule::Growth { target: 1.0.into(), gain: 1.0.into(), bias: 0.0.into(), rate: "rate".into(), onset: "onset".into(), duration: OPEN_DURATION.into(), monotone: true },
+            0.0,
+        ),
         // How much of the bud's curl a petal still holds (1 = closed bud),
         // along the petal and across it: cupped inner petals keep most of
         // it, so the centre stays a bowl, and outer petals lose most of it.

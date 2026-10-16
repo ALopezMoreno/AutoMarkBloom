@@ -189,7 +189,7 @@ impl Flower {
         self.pose = pose;
         let pose = &self.pose;
         let max_step = 0.25 * self.cap;
-        let skin = 2.0 * self.cap;
+        let skin = 0.5 * self.cap;
         let reach = self.cap + skin;
         let mut contacts = std::mem::replace(&mut self.contacts, Contacts::new(&[], 1));
         contacts.rebuild(&x, reach);

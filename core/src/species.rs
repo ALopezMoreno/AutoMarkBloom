@@ -84,12 +84,25 @@ pub struct Species {
     pub petal_type_weights: [f64; 3],
     /// Chance a petal twists clockwise (else anticlockwise).
     pub twist_clockwise: f64,
+
+    // Opening (stage 2).
+    /// How far petals open: angle of a fully open petal's base-to-tip chord
+    /// from straight up, for the innermost and outermost layers (radians;
+    /// pi/2 is horizontal, out to the sepals).
+    /// Not written into the bud's JSON, so bud output is unchanged.
+    #[serde(default = "default_open_angle", skip_serializing)]
+    pub open_angle: [f64; 2],
+}
+
+fn default_open_angle() -> [f64; 2] {
+    [1.0, 1.65]
 }
 
 impl Species {
     pub fn peony() -> Self {
         Species {
             name: "peony".into(),
+            open_angle: default_open_angle(),
             layers: [6, 10],
             aspect: [1.0, 1.2],
             max_thickness: [0.035, 0.06],

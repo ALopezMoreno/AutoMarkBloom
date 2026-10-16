@@ -11,6 +11,10 @@
 //!    `memory`, bends back by `reflex` at the base hinge, and stretches by
 //!    `length`. Starting from the same base point and base direction, the
 //!    curve is integrated again, so with no growth the bud comes back exactly.
+//!    If `splay_angle` is present, the base hinge then folds further until the
+//!    base-to-tip chord has turned the fraction `splay` [0] of the way to
+//!    that angle from straight up (pi/2 = horizontal): how far the flower
+//!    opens is a species setting, independent of the bud's own curl.
 //! 2. Each row keeps its arc length times `width` and moves to the new
 //!    distance from the axis. `wrap` blends the row between that arc (1) and
 //!    a flat line (0); `cupping` bends it toward the axis.
@@ -173,6 +177,7 @@ impl Petal {
         let (l, w, mem, refl) = (g("length", 1.0), g("width", 1.0), g("memory", 1.0), g("reflex", 0.0));
         let (wrap, cup, ruf) = (g("wrap", 1.0), g("cupping", 0.0), g("ruffle", 1.0));
         let (edge, asym, beta) = (g("edge", 0.0), g("asymmetry", 0.0), g("thinning", 0.6));
+        let splay = g("splay", 0.0);
         let (nu, nv) = (self.nu, self.nv);
         let fv = |v: usize| v as f64 / (nv - 1) as f64;
         let len_at = |f: f64| 1.0 + (l - 1.0) * ramp(f, 0.15);
@@ -187,15 +192,33 @@ impl Petal {
             .collect();
         let psi: Vec<f64> = (0..nv - 1).map(|v| math::atan2(self.z[v + 1] - self.z[v], self.rho[v + 1] - self.rho[v])).collect();
         let hsum: f64 = (1..nv - 1).map(|v| hinge(fv(v))).sum::<f64>().max(1e-9);
-        let (mut rho, mut z) = (vec![self.rho[0]], vec![self.z[0]]);
-        let mut ang = psi[0];
-        for v in 0..nv - 1 {
-            if v > 0 {
-                ang += mem * wrap_pi(psi[v] - psi[v - 1]) - refl * hinge(fv(v)) / hsum;
+        // `fold` is the total extra outward turning at the base hinge.
+        let curve = |fold: f64| {
+            let (mut rho, mut z) = (vec![self.rho[0]], vec![self.z[0]]);
+            let mut ang = psi[0];
+            for v in 0..nv - 1 {
+                if v > 0 {
+                    ang += mem * wrap_pi(psi[v] - psi[v - 1]) - fold * hinge(fv(v)) / hsum;
+                }
+                let s = seg[v] * len_at(0.5 * (fv(v) + fv(v + 1)));
+                rho.push(rho[v] + s * math::cos(ang));
+                z.push(z[v] + s * math::sin(ang));
             }
-            let s = seg[v] * len_at(0.5 * (fv(v) + fv(v + 1)));
-            rho.push(rho[v] + s * math::cos(ang));
-            z.push(z[v] + s * math::sin(ang));
+            (rho, z)
+        };
+        // Angle of the base-to-tip chord from straight up (pi/2 = horizontal).
+        let chord = |rho: &[f64], z: &[f64]| math::atan2(rho[nv - 1] - rho[0], z[nv - 1] - z[0]);
+        let (mut rho, mut z) = curve(refl);
+        if let Some(goal) = ch.get("splay_angle", p).map(|v| v[0]) {
+            // Splay: fold at the hinge until the chord has turned `splay` of
+            // the way from where it is to `splay_angle`. The hinge is not at
+            // the very base, so correct a few times.
+            let target = chord(&rho, &z) + splay * (goal - chord(&rho, &z));
+            let mut fold = refl;
+            for _ in 0..4 {
+                fold += target - chord(&rho, &z);
+                (rho, z) = curve(fold);
+            }
         }
 
         // 2. Rows: arc length times width, at the new distance; wrap and cup.

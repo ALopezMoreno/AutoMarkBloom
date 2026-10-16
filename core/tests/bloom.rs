@@ -48,7 +48,7 @@ fn with_no_growth_the_pose_is_the_packed_bud() {
 #[test]
 fn adding_a_channel_leaves_the_flower_unchanged() {
     let b = bud(11, 0);
-    let specs = program::default_program();
+    let specs = program::default_program(&b.species);
     let inputs = bloom::bud_inputs(&b);
     let base = bloom::open_with(&b, &specs, &inputs, &quick()).unwrap();
     let mut more = specs.clone();
@@ -120,7 +120,7 @@ fn relax_gradient_matches_finite_differences() {
     let s = RelaxSettings::default();
     let mut flower = Flower::new(&grids, &b.shells, &s);
     let nodes: Vec<usize> = grids.iter().map(|g| g.pos.len()).collect();
-    let mut ch = Channels::new(&program::default_program(), &bloom::bud_inputs(&b), &nodes, 3).unwrap();
+    let mut ch = Channels::new(&program::default_program(&b.species), &bloom::bud_inputs(&b), &nodes, 3).unwrap();
     ch.step(0.0, 0.5);
     let t: Vec<_> = flower.petals.iter().enumerate().map(|(p, pt)| pt.targets(&ch, p)).collect();
     let pose: Vec<[f64; 3]> = t.iter().flat_map(|x| x.pose.iter().cloned()).collect();
@@ -164,4 +164,21 @@ fn json_continues_the_bud_frames() {
         assert_eq!(f["petals"][0]["thick"].as_array().unwrap().len(), per);
     }
     assert_eq!(v["flower_index"], 0);
+}
+
+#[test]
+fn outer_petals_open_out_to_the_species_angle() {
+    let b = bud(11, 0);
+    let o = open(&b);
+    let last = o.frames.last().unwrap();
+    let top = b.sheets.iter().map(|s| s.layer).max().unwrap();
+    let [_, outer] = b.species.open_angle;
+    for (p, s) in b.sheets.iter().enumerate().filter(|(_, s)| s.layer == top) {
+        let x = &last.pos[p];
+        let (nu, _) = s.grid();
+        let (base, tip) = (x[nu / 2], x[x.len() - 1 - nu / 2]);
+        let rho = |q: [f64; 3]| (q[0] * q[0] + q[1] * q[1]).sqrt();
+        let chord = (rho(tip) - rho(base)).atan2(tip[2] - base[2]);
+        assert!(chord > outer - 0.4, "outer petal {p} chord {chord:.2} rad, species asks {outer:.2}");
+    }
 }

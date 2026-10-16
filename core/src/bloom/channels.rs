@@ -10,6 +10,8 @@
 //!   `onset` and `onset + duration`. With rate 1 this lands exactly on the
 //!   target; slower petals stop short, faster ones arrive early. `monotone`
 //!   forbids decreasing steps, so sizes never shrink.
+//! * `Derived`: x = gain * from + bias, recomputed every step (unit changes,
+//!   mixing a species setting into a bud latent).
 //! * `State`: owned by a consumer (geometry, sepals); the stepper leaves it.
 //!
 //! Every rule parameter is a constant or the *name* of another channel, so
@@ -59,6 +61,7 @@ pub enum Rule {
     Fixed,
     Drift { mean: Param, revert: Param, sigma: Param },
     Growth { target: Param, gain: Param, bias: Param, rate: Param, onset: Param, duration: Param, monotone: bool },
+    Derived { from: Param, gain: Param, bias: Param },
     State,
 }
 
@@ -68,6 +71,7 @@ impl Rule {
             Rule::Fixed => "fixed",
             Rule::Drift { .. } => "drift",
             Rule::Growth { .. } => "growth",
+            Rule::Derived { .. } => "derived",
             Rule::State => "state",
         }
     }
@@ -75,6 +79,7 @@ impl Rule {
     fn params(&self) -> Vec<&Param> {
         match self {
             Rule::Fixed | Rule::State => vec![],
+            Rule::Derived { from, gain, bias } => vec![from, gain, bias],
             Rule::Drift { mean, revert, sigma } => vec![mean, revert, sigma],
             Rule::Growth { target, gain, bias, rate, onset, duration, .. } => vec![target, gain, bias, rate, onset, duration],
         }
@@ -248,7 +253,32 @@ impl Channels {
             let rngs = (0..slots).map(|p| Pcg32::new(ck, p as u64)).collect();
             chans.insert(name, Channel { spec, values, rngs });
         }
-        Ok(Channels { chans, nodes: nodes.to_vec() })
+        let mut out = Channels { chans, nodes: nodes.to_vec() };
+        out.derive();
+        Ok(out)
+    }
+
+    /// Set every `Derived` channel from the current values (so they hold
+    /// from the start, not only after the first step).
+    fn derive(&mut self) {
+        let mut next = Vec::new();
+        for (name, c) in &self.chans {
+            if let Rule::Derived { from, gain, bias } = &c.spec.rule {
+                let d = c.spec.dims;
+                let values: Vec<Vec<f64>> = c
+                    .values
+                    .iter()
+                    .enumerate()
+                    .map(|(slot, v)| {
+                        (0..v.len()).map(|i| self.param(gain, slot, i / d, i % d) * self.param(from, slot, i / d, i % d) + self.param(bias, slot, i / d, i % d)).collect()
+                    })
+                    .collect();
+                next.push((name.clone(), values));
+            }
+        }
+        for (name, values) in next {
+            self.chans.get_mut(&name).expect("same keys").values = values;
+        }
     }
 
     pub fn petals(&self) -> usize {
@@ -319,6 +349,7 @@ impl Channels {
                     let pr = |p: &Param| self.param(p, slot, node, comp);
                     match &c.spec.rule {
                         Rule::Fixed | Rule::State => {}
+                        Rule::Derived { from, gain, bias } => *x = pr(gain) * pr(from) + pr(bias),
                         Rule::Drift { mean, revert, sigma } => {
                             let n = rng.normal();
                             *x += pr(revert) * (pr(mean) - *x) * dt + pr(sigma) * math::sqrt(dt.max(0.0)) * n;
