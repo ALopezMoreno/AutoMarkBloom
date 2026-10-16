@@ -71,6 +71,10 @@ pub struct Species {
     /// grows length more, giving waves across the petal; negative grows
     /// width more, giving pleats fanning from base to tip.
     pub growth_anisotropy: [f64; 2],
+    /// Resistance to sharp single-cell kinks, as a multiple of
+    /// `petal_stiffness`. High values give smooth, broad folds (peony);
+    /// 0 lets petals crinkle at the finest scale (papery petals, poppy).
+    pub zigzag_bending: [f64; 2],
 
     // Petal latents handed to the opening stage (plant-level means).
     /// Overall size potential of the plant's petals.
@@ -116,7 +120,7 @@ impl Species {
             phi_base: [0.45, 0.45],
             phi_top_gap: [0.10, 0.10],
             growth_stages: [10, 14],
-            growth_rate: [0.05, 0.08],
+            growth_rate: [0.1, 0.16],
             quiet_growth: [0.15, 0.4],
             edge_boost: [0.6, 1.4],
             activity_base: [0.15, 0.3],
@@ -129,6 +133,7 @@ impl Species {
             growth_correlation: [1.0, 2.0],
             growth_persistence: [0.5, 0.8],
             growth_anisotropy: [-0.25, 0.15],
+            zigzag_bending: [3.0, 5.0],
             size_potential: [0.85, 1.15],
             cup_inner: [0.6, 0.9],
             cup_outer: [0.1, 0.35],

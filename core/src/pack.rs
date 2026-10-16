@@ -13,7 +13,7 @@
 //! A small flower-seeded nudge along the shell normal breaks symmetry at the
 //! start. The base row of every petal is pinned to the receptacle.
 
-use crate::energy::{Candidate, Envelope, Params, Spring, System, Terms};
+use crate::energy::{Candidate, Envelope, Params, Bend, Spring, System, Terms};
 use crate::growth::Growth;
 use crate::math;
 use crate::rng::Pcg32;
@@ -91,6 +91,7 @@ pub fn build_system(sheets: &[Sheet], shells: &Shells, t: &PlantTraits) -> (Syst
     let mut petal = Vec::new();
     let mut pinned = Vec::new();
     let mut springs = Vec::new();
+    let mut bends = Vec::new();
     let mut tris = Vec::new();
     for (si, s) in sheets.iter().enumerate() {
         let o = x.len();
@@ -131,11 +132,26 @@ pub fn build_system(sheets: &[Sheet], shells: &Shells, t: &PlantTraits) -> (Syst
                 if v + 2 < NV {
                     add(idx(u, v), idx(u, v + 2), k_bend);
                 }
+                if t.zigzag_bending > 0.0 {
+                    // Rest value is the laid-out second difference, so the
+                    // shell's own curvature costs nothing.
+                    let mut bend = |a: usize, b: usize, c: usize| {
+                        let d = [0, 1, 2].map(|k| s.pos[a][k] - 2.0 * s.pos[b][k] + s.pos[c][k]);
+                        let r = math::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+                        bends.push(Bend { a: o + a, b: o + b, c: o + c, rest: r, rest0: r, k: k_bend * t.zigzag_bending });
+                    };
+                    if u + 2 < NU {
+                        bend(idx(u, v), idx(u + 1, v), idx(u + 2, v));
+                    }
+                    if v + 2 < NV {
+                        bend(idx(u, v), idx(u, v + 1), idx(u, v + 2));
+                    }
+                }
             }
         }
     }
     let params = Params { k_sepal: t.sepal_stiffness, layer_freedom: t.layer_freedom, ..Params::default() };
-    let sys = System { thick, layer, petal, springs, tris, shells: shells.clone(), params };
+    let sys = System { thick, layer, petal, springs, bends, tris, shells: shells.clone(), params };
     (sys, x, pinned)
 }
 
@@ -190,6 +206,11 @@ impl Relaxer {
         for s in &sys.springs {
             d[s.a] += s.k;
             d[s.b] += s.k;
+        }
+        for b in &sys.bends {
+            d[b.a] += b.k;
+            d[b.b] += 4.0 * b.k;
+            d[b.c] += b.k;
         }
         for c in &self.cands {
             d[c.node] += p.k_contact;
@@ -354,6 +375,10 @@ pub fn develop(
                 _ => &scale,
             };
             s.rest = s.rest0 * 0.5 * (f[s.a] + f[s.b]);
+        }
+        for b in sys.bends.iter_mut() {
+            let f = if b.b - b.a == 1 { &across } else { &along };
+            b.rest = b.rest0 * f[b.b];
         }
         env.rest = shells.envelope * (1.0 + t.sepal_growth * stage as f64 / t.growth_stages as f64);
         relax.run(&sys, &mut x, &mut env, &pinned, settings.relax_iterations, settings.dt_max);

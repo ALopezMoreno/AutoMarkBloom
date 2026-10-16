@@ -73,6 +73,7 @@ pub struct PlantTraits {
     pub growth_correlation: f64,
     pub growth_persistence: f64,
     pub growth_anisotropy: f64,
+    pub zigzag_bending: f64,
     pub size_potential: f64,
     pub cup_inner: f64,
     pub cup_outer: f64,
@@ -156,6 +157,7 @@ impl PlantTraits {
         let growth_correlation = r.range(s.growth_correlation[0], s.growth_correlation[1]);
         let growth_persistence = r.range(s.growth_persistence[0], s.growth_persistence[1]);
         let growth_anisotropy = r.range(s.growth_anisotropy[0], s.growth_anisotropy[1]);
+        let zigzag_bending = r.range(s.zigzag_bending[0], s.zigzag_bending[1]);
         PlantTraits {
             layers,
             aspect,
@@ -185,6 +187,7 @@ impl PlantTraits {
             growth_correlation,
             growth_persistence,
             growth_anisotropy,
+            zigzag_bending,
             size_potential,
             cup_inner,
             cup_outer,
