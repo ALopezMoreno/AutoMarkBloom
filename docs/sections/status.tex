@@ -8,12 +8,13 @@
 Stage & Status & Notes \\
 \midrule
 Seeds and traits (\cref{sec:seeds}) & \statusbuilt & One \texttt{u64} per plant; named traits drawn from species ranges. \\
+Three tiers of variation (\cref{sec:tiers}) & \statusplanned & Approved: species, plant means, per-flower bud runs plus chain noise. \\
 Nested shells (\cref{sec:shells}) & \statusrework & Fixed egg-shaped envelope today; a swelling envelope is planned. \\
 Shell automaton (\cref{sec:ca}) & \statusrework & Decides petal count, placement and outline. Will also drive local growth rates. \\
 Thick petal sheets (\cref{sec:sheets}) & \statusrework & $7\times11$ control grid today; a finer grid is planned. \\
 Packing energy (\cref{sec:packing}) & \statusrework & Exact gradient, FIRE relaxation. Layers will be allowed to mix. \\
 Flower JSON (\cref{sec:output}) & \statusbuilt & Format v1, shared with the viewer; byte-identical on every platform. \\
-Flowering Markov chain (\cref{sec:flowering}) & \statuspaused & Only the 2D Python prototype exists. \\
+Flowering Markov chain (\cref{sec:flowering}) & \statuspaused & Only the 2D Python prototype exists. Input-agnostic 3D design approved. \\
 Logistic-map colour (\cref{sec:colour}) & \statusplanned & Design only. \\
 Determinism checks (\cref{sec:determinism}) & \statusbuilt & Golden digests on Linux, macOS, Windows and WebAssembly. \\
 \bottomrule

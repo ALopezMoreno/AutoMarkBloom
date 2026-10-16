@@ -7,9 +7,9 @@ draws from its own stream (key $1000+i$ for flower $i$,
 \cref{sec:seeds}). Flowers on one plant therefore share their bud and their
 targets but take different paths: siblings, not clones.
 
-Andres has put the 3D flowering stage on hold. This section records the
-prototype that exists and the design agreed so far, and will be rewritten when
-work resumes.
+Andres has put building the 3D flowering stage on hold. This section records
+the prototype that exists and the approved design, and will be rewritten when
+the code lands.
 
 \subsection{The prototype (2D, discrete)}
 \paragraph{State.} Each petal carries three bin indices: length $\lambda$ (14 bins,
@@ -54,20 +54,85 @@ $30^\circ\min(P,1)$, so crowded petals bend instead of spreading. Because $P$
 couples petals, the Markov property holds for the joint state of all petals,
 not for each petal on its own.
 
-\subsection{The 3D design agreed so far}
+\subsection{The approved 3D design}\label{sec:flowering-design}
+\stagebox{\statusplanned}{\src{automark-bloom/species/design-decisions-opening.md} (shared folder)}
+
+\paragraph{Opening is growth plus relaxation.} Real opening is irreversible
+cell expansion following a mostly fixed program: an S-shaped growth curve that
+starts with the outer layers. Variation sits on top of that program, in each
+petal's start time and growth rate, and contact with neighbours shapes the
+result. The model copies that split:
 \begin{itemize}[leftmargin=*]
-\item \textbf{Same object throughout.} Flowering starts from each petal's
-  packed sheet in the bud (\cref{sec:sheets,sec:packing}) and reshapes those
-  same control points, so the opening animation starts from the packed bud.
-\item \textbf{Continuous state.} Length, width and curl change continuously
-  rather than in bins, while the steps stay random.
-\item \textbf{The chain moves targets; the energy moves petals.} The Markov
-  chain changes each petal's targets (for example rest lengths and preferred
-  curvature), and the sheets follow by relaxing the same differentiable energy,
-  so petals keep their thickness and never pass through each other while
-  opening.
-\item \textbf{Frames.} Each step becomes a frame in the flower JSON with the
-  same topology (\cref{sec:output}).
-\item \textbf{Ideas to fold in} from the design notes: phyllotactic spiral
-  angle, petals growing larger outward, and bending to pack against neighbours.
+\item the \emph{growth program} (species tier, \cref{sec:tiers}) sets how fast
+  each quantity should grow at each age;
+\item the \emph{Markov chain} supplies only the noise, through a slowly
+  drifting rate factor per petal;
+\item the bud stage's \emph{energy relaxation} (\cref{sec:packing}) turns the
+  grown quantities into geometry.
 \end{itemize}
+Curl, reflex and ruffles come out of differential growth plus contact. They
+are not an independent curl state as in the prototype.
+
+\paragraph{State.} The chain is Markov over the whole flower: the state at a
+step holds everything the next step needs. Per petal $j$ that is its sheet
+geometry $X_j$, its accumulated growth quantities $\vect q_j$, a rate factor
+$\rho_j$ and its age $a_j$. The growth quantities are
+\begin{center}\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+Quantity & Shape it produces \\
+\midrule
+length, width & size \\
+edge growth versus midline & flare and ruffling \\
+one-face growth at the base & reflex (folding back) \\
+face-versus-face growth across the blade & cupping \\
+left versus right edge growth (optional) & twist, lopsided curl \\
+\bottomrule
+\end{tabular}
+\end{center}
+Thickness thins as area grows and stays under the cap $\tmax$.
+
+\paragraph{One step.} Each step
+\begin{enumerate}[leftmargin=*]
+\item drifts each rate factor by mean-reverting noise, for example
+  $\rho_j \leftarrow \bar\rho + \kappa(\rho_j - \bar\rho) + s\,\xi_j$ with
+  $\xi_j\sim\Norm(0,1)$, so a petal that starts fast tends to stay fast;
+\item adds growth increments $\Delta\vect q_j = \rho_j\, G(a_j;\ \text{latents}_j)$
+  from the growth program $G$, never negative for size;
+\item maps the new growth quantities to the energy's targets (rest lengths and
+  preferred curvature) and relaxes the energy, so petals keep their thickness
+  and never pass through each other;
+\item writes a frame of the flower JSON with the same topology
+  (\cref{sec:output}).
+\end{enumerate}
+Each petal has its own noise on every quantity, so petals differ in rate and in
+how they curl, as well as through their layer and their contacts.
+
+\paragraph{Inputs: the bud's latent quantities.} The chain starts from each
+petal's packed sheet and its latent quantities (\cref{sec:tiers}): growth
+potentials, shape tendencies, timing and fixed type.
+
+\subsection{Input-agnostic machinery}\label{sec:channels}
+New latent quantities, such as colour gradients for the logistic-map stage
+(\cref{sec:colour}), must be addable without modifying the opening machinery.
+The design does this with generic \emph{channels}:
+\begin{itemize}[leftmargin=*]
+\item A channel is a named per-petal (or per-flower) quantity with a value, a
+  target, a noise specification and an update rule from a small set of kinds:
+  monotone growth toward a target, mean-reverting drift, or fixed. The stepper
+  loops over channels without knowing what any of them mean.
+\item Channels the geometry uses feed the relaxation step through one mapping
+  layer. A channel the geometry ignores, such as colour, simply evolves and is
+  exported.
+\item Each channel draws from its own random sub-stream derived from its name,
+  so adding a channel never shifts the draws of the others
+  (\cref{sec:seeds}).
+\item The flower JSON carries channels generically, per point or per petal and
+  per frame, which fits the optional \texttt{color} field already planned in
+  the format.
+\end{itemize}
+Adding a channel means declaring it and, if needed, its consumer. The stepper,
+the random streams and the export format stay unchanged.
+
+\paragraph{Ideas still to fold in} from the original design notes: phyllotactic
+spiral angle and petals growing larger outward.

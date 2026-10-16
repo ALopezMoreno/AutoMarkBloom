@@ -9,6 +9,8 @@ genetics and how much from good stochastic rules.
 
 \subsection{Two stages, two kinds of randomness}
 The model follows the design principle \emph{structure first, dynamics second}.
+The list below is how the code works today; \cref{sec:tiers} gives the
+approved design that replaces it.
 
 \begin{enumerate}[leftmargin=*]
 \item \textbf{Bud formation} is seeded per \emph{plant}. Every bud on a plant has
@@ -53,6 +55,55 @@ The model follows the design principle \emph{structure first, dynamics second}.
 \caption{The pipeline. Solid boxes are built; dashed boxes are designed only.}
 \label{fig:pipeline}
 \end{figure}
+
+\subsection{Three tiers of variation (approved design)}\label{sec:tiers}
+\stagebox{\statusplanned. The code still seeds the bud per plant.}{\src{core/src/traits.rs}, \src{core/src/species.rs}}
+
+Identical buds on every flower of a plant go too far: real flowers on one
+plant share a genotype but still differ in petal count, size and placement,
+through developmental noise and conditions such as temperature, and side buds
+are smaller than the main one. Variation is therefore split into three tiers.
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+Tier & What it sets \\
+\midrule
+Species & The rules and ranges: petal type (flat, cupped, rolled), spiral or
+  ring arrangement, twist direction, the shape of the growth program, opening
+  order, and the allowed range of every plant trait. \\
+Plant & Heritable trait \emph{means}, like a cultivar: inhibition and growth
+  parameters (so typical petal count and width), layer count, how double the
+  flower is, thickness, bud shape, size potential, and per-layer cup and fold
+  targets. \\
+Flower & An overall vigour or size factor (main bud versus side bud,
+  weather); its own automaton run from the plant's traits, so exact petal count
+  and placement differ, with layer count varying by about one; per-petal latent
+  quantities drawn around the plant's targets; then the chain's noise during
+  opening. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The change from today's code is that traits stay per plant but the bud is run
+per flower, seeded by the flower. Siblings then look like the same cultivar
+without being clones.
+
+\paragraph{The bud hands over latent quantities.} Besides its packed geometry,
+each petal leaves the bud with a vector of latent quantities that become the
+inputs to the opening stage (\cref{sec:flowering}):
+\begin{itemize}[leftmargin=*]
+\item \emph{growth potential}: target length, width and edge growth, largely
+  read from the automaton (a petal's patch width and the rows it reached stand
+  in for primordium size, which sets final organ size in real flowers);
+\item \emph{shape tendencies}: target fold at the base and target cupping,
+  set mostly by layer;
+\item \emph{timing}: when the petal starts opening, outer layers first;
+\item \emph{type}: flat, cupped or rolled, and twist direction; these are
+  fixed and never touched by the chain.
+\end{itemize}
+More latent quantities, such as colour gradients, can be added later without
+changing the opening machinery.
 
 \subsection{Why shells and sheets, not voxels}
 An early idea was to grow petals as voxel sheets inside an egg-shaped volume.
