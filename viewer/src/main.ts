@@ -10,6 +10,7 @@ import { download, exportAnimated, exportStatic } from "./export";
 import { drawSchematic, type Section } from "./section";
 import { layerCss } from "./palette";
 import { PlantParts } from "./plant";
+import { shapeFactor } from "./shape";
 import { categoryCss, rampCss } from "./channels";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -56,31 +57,39 @@ scene.add(group);
 let time = 0;
 let playing = false;
 
+/** A shell of scaled radius `a` in three.js coordinates (y up). */
+function shellGeometry(doc: FlowerDoc, a: number, w: number, h: number): THREE.BufferGeometry {
+  const geo = new THREE.SphereGeometry(1, w, h);
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const r = a * shapeFactor(doc.shells, y);
+    pos.setXYZ(i, r * x, r * y * doc.shells.aspect, r * z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 function show(doc: FlowerDoc, label: string) {
   group.clear();
   flower?.dispose();
   flower = new FlowerMesh(doc, petalMat, rimMat);
   flower.smooth = $<HTMLInputElement>("smooth").checked;
   group.add(flower.mesh, flower.rims);
-  const { aspect, core, radius } = doc.shells;
-  const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(core * 0.97, 48, 32), coreMat);
-  coreMesh.scale.set(1, aspect, 1);
+  const { core, radius } = doc.shells;
+  const coreMesh = new THREE.Mesh(shellGeometry(doc, core * 0.97, 48, 32), coreMat);
   group.add(coreMesh);
   const shells = new THREE.Group();
   shells.name = "shells";
-  for (const r of radius) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), shellMat);
-    s.scale.set(1, aspect, 1);
-    shells.add(s);
-  }
+  for (const r of radius) shells.add(new THREE.Mesh(shellGeometry(doc, r, 32, 16), shellMat));
   // Sepal envelope: resized with the bud as it swells (see updateEnvelope).
-  const env = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), envelopeMat);
+  const env = new THREE.Mesh(shellGeometry(doc, 1, 48, 24), envelopeMat);
   env.name = "sepals";
   shells.add(env);
   shells.visible = $<HTMLInputElement>("shells").checked;
   group.add(shells);
   plant?.dispose();
-  plant = new PlantParts(aspect, core, `${doc.seed}/${doc.flower_index ?? 0}`, { stem: stemMat, sepal: sepalMat });
+  plant = new PlantParts(doc.shells, `${doc.seed}/${doc.flower_index ?? 0}`, { stem: stemMat, sepal: sepalMat });
   plant.group.visible = $<HTMLInputElement>("plantParts").checked;
   group.add(plant.group);
   // Colour menu: natural, by layer, then every declared channel.
@@ -147,7 +156,7 @@ function currentSection(): Section | null {
   if (!flower || kind === "off") return null;
   const x = Number($<HTMLInputElement>("secPos").value);
   if (kind === "vertical") return { kind, at: x * Math.PI * 2 };
-  const top = flower.doc.shells.aspect * flower.envelope(time);
+  const top = flower.doc.shells.aspect * shapeFactor(flower.doc.shells, 1) * flower.envelope(time);
   return { kind: "horizontal", at: (x * 2 - 1) * top };
 }
 
@@ -177,7 +186,7 @@ function updateEnvelope() {
   const env = flower && group.getObjectByName("sepals");
   if (!flower || !env) return;
   const r = flower.envelope(time);
-  env.scale.set(r, r * flower.doc.shells.aspect, r);
+  env.scale.set(r, r, r);
   // Sepals peel back over the first part of the opening.
   const t = flower.doc.frames[Math.round(time)]?.t ?? 0;
   const open = Math.min(1, Math.max(0, t / 0.4));

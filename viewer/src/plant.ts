@@ -4,6 +4,8 @@
 // are drawn by the viewer only; the core does not model them yet.
 
 import * as THREE from "three";
+import type { ShellsInfo } from "./format";
+import { shapeFactor, shellProfile } from "./shape";
 
 const SEPALS = 5;
 const NU = 18, NV = 11;
@@ -22,17 +24,20 @@ export class PlantParts {
   private readonly sepals: THREE.Mesh[] = [];
   private readonly stem: THREE.Mesh;
 
-  constructor(private readonly aspect: number, private readonly core: number, seed: string, material: { stem: THREE.Material; sepal: THREE.Material }) {
+  constructor(private readonly shells: ShellsInfo, seed: string, material: { stem: THREE.Material; sepal: THREE.Material }) {
     this.group.name = "plant";
+    const core = shells.core;
+    // Height of the core's bottom pole over its radius, egg shape included.
+    const aspect = shells.aspect * shapeFactor(shells, -1);
     // Stem: a tapered tube from the receptacle down, with a gentle bend.
-    const len = 6 * core;
+    const len = 6;
     const curve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(0, -aspect * core * 0.95, 0),
       new THREE.Vector3(0.05 * core, -aspect * core - len * 0.35, 0.02 * core),
       new THREE.Vector3(0.18 * core, -aspect * core - len * 0.7, 0.08 * core),
       new THREE.Vector3(0.35 * core, -aspect * core - len, 0.15 * core),
     ]);
-    const tube = new THREE.TubeGeometry(curve, 48, 0.16 * core, 16, false);
+    const tube = new THREE.TubeGeometry(curve, 48, 0.16, 16, false);
     this.stem = new THREE.Mesh(tube, material.stem);
     // Receptacle: the swelling where the stem meets the bud.
     const rec = new THREE.Mesh(new THREE.SphereGeometry(0.42 * core, 32, 16), material.stem);
@@ -85,10 +90,9 @@ export class PlantParts {
           const th = th0 + 2 * v * half;
           // Slightly cupped across the width.
           const r = R * (1 + 0.03 * (1 - 4 * v * v)) ;
-          let rho = r * Math.sin(phi);
-          let z = -this.aspect * r * Math.cos(phi);
+          let [rho, z] = shellProfile(this.shells, r, phi);
           // Rotate outward about the base ring as the flower opens.
-          const baseRho = r * Math.sin(PHI_START), baseZ = -this.aspect * r * Math.cos(PHI_START);
+          const [baseRho, baseZ] = shellProfile(this.shells, r, PHI_START);
           const dr = rho - baseRho, dz = z - baseZ;
           const c = Math.cos(peel), s = Math.sin(peel);
           rho = baseRho + dr * c + dz * s;
