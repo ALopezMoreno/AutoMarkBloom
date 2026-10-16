@@ -6,6 +6,11 @@ from matplotlib.colors import LightSource
 files = sys.argv[1:-1]; out = sys.argv[-1]
 fig = plt.figure(figsize=(15, 5.2*len(files)), facecolor="white")
 ls = LightSource(azdeg=315, altdeg=35)
+def outline(sh, r, th):
+    """(x, z) of the shell of scaled radius r; th = 0 on the +x side, mirrors core/src/shells.rs."""
+    c = np.sin(th); p3 = 0.5*(5*c**3 - 3*c); tip = np.where(c > 0, c, 0)**8
+    g = 1 + sh.get("egg", 0)*p3 + sh.get("point", 0)*tip
+    return r*g*np.cos(th), sh["aspect"]*r*g*np.sin(th)
 def col(layer, L): return cm.RdPu(0.18 + 0.5*layer/max(L-1, 1))
 for k, f in enumerate(files):
     d = json.load(open(f)); nu, nv = d["grid"]["nu"], d["grid"]["nv"]
@@ -32,8 +37,8 @@ for k, f in enumerate(files):
                     ax2.add_patch(plt.Circle((pt[0], pt[2]), tt/2, color=col(info["layer"], L)))
     th = np.linspace(0, 2*np.pi, 300)
     for r, s_ in [(d["shells"]["core"], "-"), (d["shells"]["envelope"], "--")]:
-        ax2.plot(r*np.cos(th), A*r*np.sin(th), s_, color="#999", lw=0.8)
+        ax2.plot(*outline(d["shells"], r, th), s_, color="#999", lw=0.8)
     E = d["shells"]["envelope"]; ax2.set_aspect("equal"); ax2.axis("off")
-    ax2.set_xlim(-E*1.05, E*1.05); ax2.set_ylim(-A*E*1.05, A*E*1.05)
+    ax2.set_xlim(-E*1.05, E*1.05); ax2.set_ylim(-A*E*1.3, A*E*1.3)
     ax2.set_title("slice: dots are petal thickness, dashed = sepals, solid = stamens", fontsize=10)
 fig.tight_layout(); fig.savefig(out, dpi=110)

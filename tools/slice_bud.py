@@ -5,6 +5,11 @@ from matplotlib import cm
 from matplotlib.collections import LineCollection
 # usage: slice.py out.png file.json [file.json...]  (one row per file, columns = frames)
 out, files = sys.argv[1], sys.argv[2:]
+def outline(sh, r, th):
+    """(x, z) of the shell of scaled radius r; th = 0 on the +x side, mirrors core/src/shells.rs."""
+    c = np.sin(th); p3 = 0.5*(5*c**3 - 3*c); tip = np.where(c > 0, c, 0)**8
+    g = 1 + sh.get("egg", 0)*p3 + sh.get("point", 0)*tip
+    return r*g*np.cos(th), sh["aspect"]*r*g*np.sin(th)
 def segs(m, t, axis=1):
     nu, nv, _ = m.shape; S, W = [], []
     for a in range(nu-1):
@@ -40,9 +45,9 @@ for r, d in enumerate(rows):
             ax.add_collection(LineCollection(S_, colors=[cm.RdPu(0.3+0.6*info["layer"]/max(L-1,1))], linewidths=[w*95 for w in W], capstyle="round"))
         th = np.linspace(0, 2*np.pi, 300)
         R = fr.get("channels", {}).get("sepal_radius", fr.get("envelope", d["shells"]["envelope"]))
-        ax.plot(R*np.cos(th), A*R*np.sin(th), "--", color="#2e7d32", lw=1)
-        ax.plot(d["shells"]["core"]*np.cos(th), A*d["shells"]["core"]*np.sin(th), "-", color="#d4a017", lw=1)
-        ax.set_xlim(-Emax*1.08, Emax*1.08); ax.set_ylim(-A*Emax*1.08, A*Emax*1.08); ax.set_aspect("equal"); ax.axis("off")
+        ax.plot(*outline(d["shells"], R, th), "--", color="#2e7d32", lw=1)
+        ax.plot(*outline(d["shells"], d["shells"]["core"], th), "-", color="#d4a017", lw=1)
+        ax.set_xlim(-Emax*1.08, Emax*1.08); ax.set_ylim(-A*Emax*1.3, A*Emax*1.3); ax.set_aspect("equal"); ax.axis("off")
         ax.set_title(f"plant {d['seed']} · flower {d.get('flower_index', 0)}: {len(fr['petals'])} petals" if single else f"seed {d['seed']} · " + ("closed bud" if fi == nf-1 else f"stage {fi}"), fontsize=10)
 fig.suptitle("Slice through the bud as it develops (green dashed = sepals, gold = stamens, line width = petal thickness)", fontsize=11)
 fig.tight_layout(); fig.savefig(out, dpi=120)

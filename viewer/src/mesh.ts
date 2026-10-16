@@ -9,6 +9,7 @@ import * as THREE from "three";
 import type { FlowerDoc } from "./format";
 import { layerColor } from "./palette";
 import { Channels } from "./channels";
+import { scaledRadius } from "./shape";
 
 const BASE = new THREE.Color("#fbeedd");
 const PINK = new THREE.Color("#e9849f");
@@ -160,12 +161,11 @@ export class FlowerMesh {
 
   /** Largest scaled radius reached by any petal surface at `time` (outer face included). */
   outerRadius(time: number): number {
-    const a = this.doc.shells.aspect;
+    const sh = this.doc.shells;
     let best = 0;
     for (const { mid, thick } of this.sample(time)) {
       for (let j = 0; j < thick.length; j++) {
-        const x = mid[3 * j], y = mid[3 * j + 1], z = mid[3 * j + 2] / a;
-        const r = Math.sqrt(x * x + y * y + z * z) + thick[j] / 2;
+        const r = scaledRadius(sh, mid[3 * j], mid[3 * j + 1], mid[3 * j + 2]) + thick[j] / 2;
         if (r > best) best = r;
       }
     }

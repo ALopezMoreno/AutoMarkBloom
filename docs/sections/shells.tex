@@ -6,17 +6,29 @@ shell, and the bud's size follows from how many layers it packs and how thick
 they are.
 
 \subsection{Scaled radius}
-Lengths are in units of the core radius $R_0 = 1$, the radius of the central
-stamen and carpel zone, with $+z$ pointing up. Every shell is a level set of
-the \emph{scaled radius}
+Lengths are in units of the nominal core radius, with $+z$ pointing up. The
+core itself, the central stamen and carpel zone, has radius $R_0 = s_c$, where
+the core size $s_c$ is a species trait drawn per plant. Every shell is a level
+set of the \emph{scaled radius}
 \[
-  \rt(\x) = \sqrt{x^2 + y^2 + (z/\alpha)^2},
+  \rt(\x) = \frac{|\mathbf q|}{g(c)}, \qquad
+  \mathbf q = (x,\; y,\; z/\alpha), \qquad c = q_z / |\mathbf q|,
 \]
-a spheroid stretched by the aspect $\alpha$ along $z$. Its gradient, used for
-shell normals and by the packing energy, is
+so all shells are scaled copies of one outline: a spheroid stretched by the
+aspect $\alpha$ along $z$, reshaped by the factor
 \[
-  \nabla\rt(\x) = \frac{1}{\rt}\Bigl(x,\; y,\; \frac{z}{\alpha^2}\Bigr).
+  g(c) = 1 + \eta_e\,P_3(c) + \eta_p\,\max(c, 0)^8, \qquad P_3(c) = \tfrac12(5c^3 - 3c).
 \]
+The egg term $\eta_e$ broadens the lower body and narrows the top ($c = 1$ is the
+top pole); the point term $\eta_p$ draws the top out into a pointed tip, as in a
+rose bud. Both are species traits drawn per plant, which gives the
+plain spheroid when both are 0. Since the core is a shell too, it takes the same outline, which
+is why $|e|$ is kept to about $0.12$. With $\mathbf u = \mathbf q/|\mathbf q|$,
+the gradient used for shell normals and by the packing energy is
+\[
+  \frac{\partial\rt}{\partial\mathbf q} = \frac{\mathbf u}{g} - \frac{g'(c)}{g^2}\,\bigl(\mathbf e_z - c\,\mathbf u\bigr),
+\]
+with the $z$ component divided by $\alpha$ to give $\nabla\rt(\x)$.
 
 \subsection{Slots}
 Each layer owns a slot of width
@@ -65,7 +77,8 @@ the top pole.}
 A point on the shell of scaled radius $a$ at azimuth $\theta$ and polar angle
 $\phi$ (measured from the bottom pole) is
 \[
-  P(a,\theta,\phi) = \bigl(a\sin\phi\cos\theta,\; a\sin\phi\sin\theta,\; -\alpha a\cos\phi\bigr).
+  P(a,\theta,\phi) = r\,\bigl(\sin\phi\cos\theta,\; \sin\phi\sin\theta,\; -\alpha\cos\phi\bigr),
+  \qquad r = a\,g(-\cos\phi).
 \]
 Petals occupy polar angles from the attachment ring $\phi_b$ up to
 $\pi - \phi_g$. A fractional height $f\in[0,1]$ maps to

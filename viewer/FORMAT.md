@@ -13,7 +13,9 @@ Readers must ignore fields they don't know.
   "flower_index": 0,          // which flower on that plant; always set (each flower grows its own bud)
   "units": "core_radius",     // 1.0 = CORE_RADIUS
   "up": "+z",                 // core frame; the viewer converts to three.js +y
-  "shells": { "aspect": 1.1, "core": 1.0, "slot": 0.09, "radius": [1.05, 1.14] },
+  "shells": { "aspect": 1.1, "egg": 0.04, "point": 0.05, "core": 1.0, "slot": 0.09, "radius": [1.05, 1.14] },
+                              // every shell (core included) is |q| = a * g(c), q = (x, y, z/aspect), c = q_z/|q|,
+                              // g(c) = 1 + egg * (5c^3 - 3c)/2 + point * max(c, 0)^8; egg/point missing = 0
   "grid": { "nu": 37, "nv": 21 },   // samples per petal: u = base -> tip, v = one edge -> other
   "petals": [
     { "id": 0, "layer": 0, "theta": 0.0 }   // id = index in this list; layer 0 = innermost shell; theta = attachment angle (rad)

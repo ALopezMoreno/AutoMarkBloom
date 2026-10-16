@@ -2,6 +2,9 @@
 
 export interface ShellsInfo {
   aspect: number;
+  /** Bud outline terms (optional, 0 = ellipsoid); see shape.ts. */
+  egg?: number;
+  point?: number;
   core: number;
   radius: number[];
   /** Layer slot width (optional). */
