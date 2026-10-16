@@ -12,8 +12,8 @@ use crate::shells::Shells;
 use crate::traits::PlantTraits;
 use std::f64::consts::{PI, TAU};
 
-pub const NU: usize = 7;
-pub const NV: usize = 11;
+pub const NU: usize = 11;
+pub const NV: usize = 19;
 
 #[derive(Clone, Debug)]
 pub struct Sheet {
@@ -150,6 +150,12 @@ fn refine_scalar(v: &[f64], s: usize) -> Vec<f64> {
 }
 
 impl Sheet {
+    /// Control grid size: (across, along) = (NU, NV). Use this rather than
+    /// hard-coding the constants.
+    pub fn grid(&self) -> (usize, usize) {
+        (NU, NV)
+    }
+
     pub fn along(sa: usize) -> usize {
         (NV - 1) * sa + 1
     }

@@ -14,12 +14,12 @@ function core() {
   return ready;
 }
 
-self.onmessage = async (e: MessageEvent<{ id: number; seed: string }>) => {
-  const { id, seed } = e.data;
+self.onmessage = async (e: MessageEvent<{ id: number; seed: string; flower?: number }>) => {
+  const { id, seed, flower = 0 } = e.data;
   try {
     const m = await core();
     const t0 = performance.now();
-    const json: string = m.bud_json(BigInt(seed));
+    const json: string = m.bud_json(BigInt(seed), flower);
     self.postMessage({ id, json, ms: performance.now() - t0 });
   } catch (err) {
     self.postMessage({ id, error: String((err as Error).message ?? err) });
