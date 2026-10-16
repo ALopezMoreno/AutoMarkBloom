@@ -1,4 +1,4 @@
-//! automark --seed N [--flower K] --json out.json [--species species.json] [--relax N] [--frames] [--open N]
+//! automark --seed N [--flower K] --json out.json [--species species.json] [--relax N] [--preview] [--frames] [--open N]
 
 use automark_core::bloom::{self, BloomSettings};
 use automark_core::{export, grow_bud, PackSettings, PlantSeed, Species};
@@ -31,19 +31,24 @@ fn main() {
             }
             "--relax" => settings.relax_iterations = value(i).parse().expect("--relax takes a number"),
             "--open" => open = Some(value(i).parse().expect("--open takes a frame count")),
+            "--preview" => {
+                let frames = settings.record_frames;
+                settings = PackSettings { record_frames: frames, ..PackSettings::preview() };
+                step = 1;
+            }
             "--frames" => {
                 settings.record_frames = true;
                 step = 1;
             }
             other => {
-                eprintln!("unknown argument {other}\nusage: automark --seed N [--flower K] --json out.json [--species file.json] [--relax N] [--frames] [--open N]");
+                eprintln!("unknown argument {other}\nusage: automark --seed N [--flower K] --json out.json [--species file.json] [--relax N] [--preview] [--frames] [--open N]");
                 exit(2);
             }
         }
         i += step;
     }
     let Some(seed) = seed else {
-        eprintln!("usage: automark --seed N [--flower K] --json out.json [--species file.json] [--relax N] [--frames] [--open N]");
+        eprintln!("usage: automark --seed N [--flower K] --json out.json [--species file.json] [--relax N] [--preview] [--frames] [--open N]");
         exit(2);
     };
     let bud = grow_bud(PlantSeed(seed), flower, &species, &settings);

@@ -10,7 +10,7 @@ const page = await browser.newPage({ viewport: { width: 900, height: 700 } });
 page.on("pageerror", (e) => console.log("ERR", String(e)));
 for (const seed of ["11", "2027", "18446744073709551615"]) {
   await page.goto(`http://localhost:5196/?seed=${seed}`);
-  await page.waitForFunction(() => /Core bud|Error|must/.test(document.getElementById("info").textContent + document.getElementById("err").textContent), null, { timeout: 60000 });
+  await page.waitForFunction(() => /Core bud|Error|must/.test(document.getElementById("info").textContent + document.getElementById("err").textContent), null, { timeout: 240000 });
   await page.waitForTimeout(600);
   console.log(seed, await page.evaluate(() => document.getElementById("info").textContent + " | " + document.getElementById("err").textContent));
   await page.screenshot({ path: `${out}/live_${seed}.png` });

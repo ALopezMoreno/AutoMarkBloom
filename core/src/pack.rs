@@ -43,6 +43,14 @@ impl PackSettings {
     pub fn quick() -> Self {
         PackSettings { relax_iterations: 15, settle_iterations: 15, ..Self::default() }
     }
+
+    /// About six times faster than the default, for browsing buds
+    /// interactively. Same plant, flower traits, petal layout and growth
+    /// automaton draws, but the packing is less settled, so the geometry
+    /// (and channels derived from it) differs slightly from the canonical bud.
+    pub fn preview() -> Self {
+        PackSettings { relax_iterations: 40, settle_iterations: 80, ..Self::default() }
+    }
 }
 
 #[derive(Clone, Debug, serde::Serialize)]

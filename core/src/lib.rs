@@ -106,3 +106,9 @@ pub fn grow_bud(seed: PlantSeed, flower_index: u64, species: &Species, settings:
 pub fn grow_bud_json(seed: u64, flower_index: u64) -> String {
     export::flower_json(&grow_bud(PlantSeed(seed), flower_index, &Species::peony(), &PackSettings::default()))
 }
+
+/// Like `grow_bud_json`, with `PackSettings::preview()`: fast but not
+/// canonical, so it is not covered by the golden digests.
+pub fn grow_bud_preview_json(seed: u64, flower_index: u64) -> String {
+    export::flower_json(&grow_bud(PlantSeed(seed), flower_index, &Species::peony(), &PackSettings::preview()))
+}

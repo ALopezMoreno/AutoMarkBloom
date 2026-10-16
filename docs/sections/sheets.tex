@@ -1,9 +1,9 @@
 \section{Thick petal sheets}\label{sec:sheets}
-\stagebox{\statusrework}{\src{core/src/sheet.rs}}
+\stagebox{\statusbuilt}{\src{core/src/sheet.rs}}
 
 Each petal patch becomes a \emph{thick sheet}: a smooth mid-surface described by
-an $\NU \times \NV = 7 \times 11$ grid of control points (7 across, 11 from base
-to tip), plus a thickness at every control point. The same object will carry
+an $\NU \times \NV = 11 \times 19$ grid of control points (11 across, 19 from
+base to tip), plus a thickness at every control point. The same object will carry
 the petal from the closed bud through the whole opening, which is what makes
 the animation smooth.
 
@@ -50,6 +50,3 @@ $(\NV - 1)s_a + 1$ rows and $(\NU - 1)s_c + 1$ columns. Because Catmull--Rom
 splines pass through their control points, the evaluated surface passes
 through every control point.
 
-\begin{remark}
-The rework gives each petal a much finer grid so it can hold small crumples.
-\end{remark}

@@ -3,25 +3,32 @@
 
 export const coreAvailable = Object.keys(import.meta.glob("../../wasm/pkg/automark_wasm.js")).length > 0;
 
+export interface Grown {
+  json: string;
+  ms: number;
+  /** True when the faster preview packing was used. */
+  preview: boolean;
+}
+
 let worker: Worker | null = null;
 let nextId = 0;
-const pending = new Map<number, { resolve: (v: { json: string; ms: number }) => void; reject: (e: Error) => void }>();
+const pending = new Map<number, { resolve: (v: Grown) => void; reject: (e: Error) => void }>();
 
-/** Grows the bud for `seed` (a u64, as a decimal string) and returns its flower JSON. */
-export function growBud(seed: string): Promise<{ json: string; ms: number }> {
+/** Grows flower `flower` of plant `seed` (a u64, as a decimal string) and returns its flower JSON. */
+export function growBud(seed: string, flower = 0, full = false): Promise<Grown> {
   if (!worker) {
     worker = new Worker(new URL("./coreWorker.ts", import.meta.url), { type: "module" });
     worker.onmessage = (e) => {
-      const { id, json, ms, error } = e.data;
+      const { id, json, ms, preview, error } = e.data;
       const p = pending.get(id);
       pending.delete(id);
       if (error) p?.reject(new Error(error));
-      else p?.resolve({ json, ms });
+      else p?.resolve({ json, ms, preview: !!preview });
     };
   }
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    worker!.postMessage({ id, seed });
+    worker!.postMessage({ id, seed, flower, full });
   });
 }

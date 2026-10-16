@@ -5,6 +5,7 @@ Rust core for Automark Bloom. Stage 1 (bud formation and development) and stage 
 ```
 cargo run --release -- --seed 11 --json bud.json            # peony preset, flower 0
 cargo run --release -- --seed 11 --flower 3 --json bud.json # a sibling on the same plant
+cargo run --release -- --seed 11 --preview --json bud.json  # about 6x faster, less settled
 cargo run --release -- --seed 11 --json bud.json --species dahlia.json
 cargo run --release -- --seed 11 --json bud.json --frames      # include the bud's growth stages
 cargo run --release -- --seed 11 --json flower.json --frames --open 24  # bud stages, then 24 opening frames
@@ -15,6 +16,7 @@ Library entry points:
 - `grow_bud(PlantSeed, flower_index, &Species, &PackSettings) -> Bud`: traits per plant; bud automaton, growth, packing and latents per flower.
 - `export::flower_json(&Bud) -> String`: the shared flower JSON (`viewer/FORMAT.md`), canonical and byte-identical across platforms.
 - `grow_bud_json(seed: u64, flower_index: u64) -> String`: peony preset with default settings, for wasm and seed tests.
+- `grow_bud_preview_json(seed, flower_index)`: the same with `PackSettings::preview()` (wasm `bud_preview_json`). Same plant, petal count and layout, but the packing is less settled, so geometry differs slightly and it has no golden digest.
 - `bloom::open_flower(&Bud, &BloomSettings) -> Opening` and `bloom::export::flower_json(&Bud, &Opening)`: the opening, appended to the bud's JSON as frames with `stage: "open"` and t in (0, 1].
 
 How a bud is grown (`src/lib.rs` has the overview):

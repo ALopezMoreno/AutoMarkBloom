@@ -1,15 +1,13 @@
-// Layer colours, inner -> outer, on the viridis ramp (ordered and colour-blind safe).
+// Layer colours, inner -> outer: a single rose ramp from light pink to deep
+// plum, so layers read as depth rather than as unrelated categories.
 import * as THREE from "three";
 
-const VIRIDIS = ["#440154", "#482878", "#3e4989", "#31688e", "#26828e", "#1f9e89", "#35b779", "#6ece58", "#b5de2b", "#fde725"].map(
-  (h) => new THREE.Color(h),
-);
+const INNER = new THREE.Color("#f4a7c0");
+const OUTER = new THREE.Color("#6a1c42");
 
 /** Colour for layer k of n (0 = innermost). */
 export function layerColor(k: number, n: number, out = new THREE.Color()): THREE.Color {
-  const x = n <= 1 ? 0 : (k / (n - 1)) * (VIRIDIS.length - 1);
-  const i = Math.min(VIRIDIS.length - 2, Math.floor(x));
-  return out.copy(VIRIDIS[i]).lerp(VIRIDIS[i + 1], x - i);
+  return out.copy(INNER).lerp(OUTER, n <= 1 ? 0 : k / (n - 1));
 }
 
 export function layerCss(k: number, n: number): string {

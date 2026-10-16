@@ -17,27 +17,34 @@ z &\leftarrow (z \oplus (z \gg 27)) \cdot \texttt{0x94D049BB133111EB},\\
 
 \paragraph{Sub-streams.} Each part of the model draws from its own stream, so
 changing how many numbers one part consumes never shifts another part's
-sequence. For plant seed $s$ and stream key $k$,
+sequence. For a seed $s$ and stream key $k$,
 \[
   \mathrm{derive}(s,k) = \mathrm{sm}\bigl(s \oplus \mathrm{sm}(k + \texttt{0x5EED})\bigr),
 \]
 and the stream's generator is PCG32 seeded with $\mathrm{derive}(s,k)$ and
 increment $2k+1$.
 
+Plant traits come from stream 0 of the plant seed $s$. Flower $i$ of the plant
+has its own seed $s_i = \mathrm{derive}(s, 1000 + i)$, and everything that
+flower grows draws from sub-streams of $s_i$:
 \begin{center}\small
 \begin{tabular}{@{}lll@{}}
 \toprule
-Key $k$ & Used by & Seeded per \\
+Seed & Key $k$ & Used by \\
 \midrule
-0 & trait draws (\cref{sec:traits}) & plant \\
-1 & shell automaton (\cref{sec:ca}) & plant \\
-2 & packing symmetry breaking (\cref{sec:packing}) & plant \\
-$1000 + i$ & flowering of flower $i$ (\cref{sec:flowering}) & flower \\
-\midrule
-\multicolumn{3}{@{}l}{\footnotesize In the approved design (\cref{sec:tiers}) the automaton and packing streams move from per plant to per flower.} \\
+plant $s$ & 0 & plant trait draws (\cref{sec:traits}) \\
+flower $s_i$ & 1 & shell automaton (\cref{sec:ca}) \\
+flower $s_i$ & 2 & packing symmetry breaking (\cref{sec:packing}) \\
+flower $s_i$ & 3 & growth automaton (\cref{sec:growth}) \\
+flower $s_i$ & 4 & flower traits: vigour, layer jitter (\cref{sec:flowertraits}) \\
+flower $s_i$ & 5 & seed for the latent channels (\cref{sec:channels}) \\
 \bottomrule
 \end{tabular}
 \end{center}
+Each latent channel then gets its own generator, keyed by a 64-bit FNV-1a hash
+$h$ of its name: PCG32 seeded with $\mathrm{derive}(c, h)$ and increment
+$2h+1$, where $c = \mathrm{derive}(s_i, 5)$. Adding a channel therefore never
+changes the draws of any other channel.
 
 \paragraph{PCG32} (XSH-RR variant) has a 64-bit state $S$ and odd increment $c$:
 \[
@@ -63,29 +70,64 @@ species-specific numbers live in the species; nothing peony-specific is
 hard-coded anywhere else. Peony is the built-in preset; other species are JSON
 files with the same fields.
 
-The number of layers $L$ is drawn as $\lfloor\Unif[L_0, L_1+1]\rfloor$, capped at
-$L_1$ and at least 1, so every integer in the range is equally likely.
+The integer traits (layers $L$ and growth stages $G$) are drawn as
+$\lfloor\Unif[n_0, n_1+1]\rfloor$, capped at $n_1$ and at least 1, so every
+integer in the range is equally likely.
 
 \begin{center}\small
 \begin{tabularx}{\linewidth}{@{}l c c X@{}}
 \toprule
 Trait & Symbol & Peony range & Meaning \\
 \midrule
+\multicolumn{4}{@{}l}{\emph{Layout: shells and the placement automaton}} \\
 \texttt{layers} & $L$ & 6--10 & number of petal layers (shells) \\
-\texttt{aspect} & $\alpha$ & 1.05--1.3 & bud height over width \\
+\texttt{aspect} & $\alpha$ & 1.0--1.2 & bud height over width \\
 \texttt{max\_thickness} & $\tmax$ & 0.035--0.06 & hard thickness cap, in core radii \\
 \texttt{edge\_thickness} & $e$ & 0.3--0.5 & edge thickness as a fraction of $\tmax$ \\
-\texttt{crumple\_room} & $c$ & 0.6--1.2 & extra slot width per layer, in multiples of $\tmax$ \\
+\texttt{crumple\_room} & $c$ & 0.3--0.7 & initial room per layer beyond its thickness, in multiples of $\tmax$ \\
 \texttt{inhibit\_sigma} & $\sigma$ & 0.45--0.75 & reach of a primordium's inhibition (arc length) \\
 \texttt{inhibit\_threshold} & $\tau$ & 0.35--0.6 & initiation allowed below this inhibition \\
 \texttt{init\_prob} & $p_{\mathrm{init}}$ & 0.2--0.45 & chance an uninhibited cell initiates \\
 \texttt{stagger} & $\beta$ & 0.5--1.0 & weight of the layer below's primordia \\
 \texttt{up\_prob} & $p_\uparrow$ & 0.6--0.9 & chance a petal claims the empty cell above it \\
 \texttt{lateral\_prob} & $p_\leftrightarrow$ & 0.25--0.55 & chance a petal claims an empty cell beside it \\
-\texttt{inner\_height} & $h_{\mathrm{in}}$ & 0.5--0.7 & fraction of shell height the innermost petals reach \\
-\texttt{growth\_factor} & $g$ & 1.12--1.35 & how much longer petals grow than their patch \\
+\texttt{inner\_height} & $h_{\mathrm{in}}$ & 0.75--0.9 & fraction of shell height the innermost petals reach \\
 \texttt{phi\_base} & $\phi_b$ & 0.45 & polar angle of the attachment ring (rad) \\
 \texttt{phi\_top\_gap} & $\phi_g$ & 0.10 & how far short of the top pole petals stop (rad) \\
+\multicolumn{4}{@{}l}{\emph{Development: the growth automaton and the sepals}} \\
+\texttt{growth\_stages} & $G$ & 10--14 & number of growth stages \\
+\texttt{growth\_rate} & $\gamma$ & 0.05--0.08 & linear growth per stage of an active node \\
+\texttt{quiet\_growth} & $q$ & 0.15--0.4 & growth of a quiet node, as a fraction of an active one \\
+\texttt{edge\_boost} & $b_e$ & 0.6--1.4 & extra growth at the petal margin \\
+\texttt{activity\_base} & $a_0$ & 0.15--0.3 & base chance a node is active in a stage \\
+\texttt{activity\_neighbor} & $a_1$ & 0.4--0.7 & added chance per fraction of active neighbours \\
+\texttt{pressure\_inhibition} & $a_p$ & 0.3--0.8 & chance removed by contact pressure \\
+\texttt{petal\_stiffness} & $k_b$ & 60--120 & bending stiffness at full thickness \\
+\texttt{layer\_freedom} & $f$ & 1.5--3.0 & how far a petal may stray from its layer, in slots \\
+\texttt{sepal\_stiffness} & $k_s$ & 5--25 & sepal resistance to swelling \\
+\texttt{sepal\_growth} & $g_s$ & 0.04--0.12 & growth of the sepals' rest size over the bud stage \\
+\multicolumn{4}{@{}l}{\emph{Latent means handed to the opening stage}} \\
+\texttt{size\_potential} & & 0.85--1.15 & overall size potential of the petals \\
+\texttt{cup\_inner}, \texttt{cup\_outer} & & 0.6--0.9, 0.1--0.35 & cupping target of the innermost and outermost layers \\
+\texttt{fold\_inner}, \texttt{fold\_outer} & & 0--0.15, 0.2--0.5 & base fold (reflex) target of the innermost and outermost layers \\
+\texttt{onset\_spread} & & 0.4--0.8 & spread of opening onset from outer to inner layers \\
+\texttt{latent\_noise} & & 0.05--0.15 & relative per-petal noise on latents \\
 \bottomrule
 \end{tabularx}
 \end{center}
+
+\subsection{Flower traits}\label{sec:flowertraits}
+Some species rules apply per flower rather than per plant. From stream 4 of its
+own seed, flower $i$ draws
+\begin{itemize}[leftmargin=*]
+\item a \emph{vigour} $\nu \sim \Unif[0.85, 1.1]$ for peony (main bud versus
+  side bud, conditions);
+\item a \emph{layer jitter}: with probability 0.4 the flower has one layer
+  fewer or one more than the plant, each equally likely (at least one layer).
+\end{itemize}
+The flower then grows with the plant's traits except that $L$ is its own
+jittered layer count and both \texttt{growth\_rate} and \texttt{size\_potential}
+are multiplied by $\nu$. The species also fixes the relative weights of petal
+types (flat 0.3, cupped 0.6, rolled 0.1 for peony) and the chance a petal
+twists clockwise (0.5), which are drawn per petal as channels.
+
