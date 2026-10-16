@@ -22,6 +22,8 @@ export interface PetalSample {
 
 export class FlowerMesh {
   readonly mesh: THREE.Mesh;
+  /** Petal outlines (rim of each outer face) for the schematic view; shares the mesh's buffers. */
+  readonly rims: THREE.LineSegments;
   readonly geometry = new THREE.BufferGeometry();
   readonly layerCount: number;
   readonly channels: Channels;
@@ -32,11 +34,12 @@ export class FlowerMesh {
   private readonly byLayer: Float32Array;
   /** Index count that draws layers 0..k. */
   private readonly layerEnds: number[] = [];
+  private readonly rimEnds: number[] = [];
   private readonly samples: PetalSample[];
   /** Rank of each petal's layer among the layers present (0 = innermost). */
   private readonly layerIndex: number[];
 
-  constructor(readonly doc: FlowerDoc, material: THREE.Material) {
+  constructor(readonly doc: FlowerDoc, material: THREE.Material, rimMaterial: THREE.Material = new THREE.LineBasicMaterial({ vertexColors: true })) {
     const { nu, nv } = doc.grid;
     const n = nu * nv;
     this.perPetal = 2 * n;
@@ -58,6 +61,7 @@ export class FlowerMesh {
     for (let u = nu - 1; u > 0; u--) loop.push(g(u, 0));
 
     const index: number[] = [];
+    const rimIndex: number[] = [];
     const order = doc.petals.map((_, i) => i).sort((a, b) => doc.petals[a].layer - doc.petals[b].layer || a - b);
     const maxLayer = Math.max(1, layers[layers.length - 1]);
     const c = new THREE.Color();
@@ -74,9 +78,11 @@ export class FlowerMesh {
       for (let k = 0; k < loop.length; k++) {
         const i = loop[k], j = loop[(k + 1) % loop.length];
         index.push(o + i, o + j, o + n + j, o + i, o + n + j, o + n + i);
+        rimIndex.push(o + i, o + j);
       }
       const li = layers.indexOf(petal.layer);
       this.layerEnds[li] = index.length;
+      this.rimEnds[li] = rimIndex.length;
       const inner = 1 - petal.layer / maxLayer;
       layerColor(li, layers.length, lc);
       for (let u = 0; u < nu; u++)
@@ -88,16 +94,26 @@ export class FlowerMesh {
           for (const side of [0, n]) {
             c.toArray(this.natural, 3 * (o + side + g(u, v)));
             // Inner face a little darker so the two sides read apart in sections.
-            lc.clone().multiplyScalar(side ? 0.75 : 1).toArray(this.byLayer, 3 * (o + side + g(u, v)));
+            lc.toArray(this.byLayer, 3 * (o + side + g(u, v)));
           }
         }
     }
-    for (let k = 1; k < layers.length; k++) this.layerEnds[k] ??= this.layerEnds[k - 1];
+    for (let k = 1; k < layers.length; k++) {
+      this.layerEnds[k] ??= this.layerEnds[k - 1];
+      this.rimEnds[k] ??= this.rimEnds[k - 1];
+    }
 
     this.geometry.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     this.geometry.setAttribute("color", new THREE.BufferAttribute(this.natural.slice(), 3));
     this.geometry.setIndex(index);
     this.mesh = new THREE.Mesh(this.geometry, material);
+    const rimGeo = new THREE.BufferGeometry();
+    rimGeo.setAttribute("position", this.geometry.getAttribute("position"));
+    rimGeo.setAttribute("color", this.geometry.getAttribute("color"));
+    rimGeo.setIndex(rimIndex);
+    this.rims = new THREE.LineSegments(rimGeo, rimMaterial);
+    this.rims.visible = false;
+    this.rims.frustumCulled = false;
     this.mesh.name = `automark-${doc.seed}`;
     this.setTime(0);
   }
@@ -116,7 +132,7 @@ export class FlowerMesh {
     const attr = this.geometry.getAttribute("color") as THREE.BufferAttribute;
     const arr = attr.array as Float32Array;
     if (mode === "natural") arr.set(this.natural);
-    else if (mode === "layer") arr.set(this.byLayer);
+    else if (mode === "layer" || mode === "schematic") arr.set(this.byLayer);
     else this.channels.colors(mode, time, arr);
     attr.needsUpdate = true;
   }
@@ -150,6 +166,7 @@ export class FlowerMesh {
   showLayers(k: number) {
     const i = Math.max(1, Math.min(this.layerCount, k)) - 1;
     this.geometry.setDrawRange(0, this.layerEnds[i]);
+    this.rims.geometry.setDrawRange(0, this.rimEnds[i]);
   }
 
   /** time in frames: 0 .. frameCount-1, fractional values interpolate. */
@@ -218,5 +235,6 @@ export class FlowerMesh {
 
   dispose() {
     this.geometry.dispose();
+    this.rims.geometry.dispose();
   }
 }

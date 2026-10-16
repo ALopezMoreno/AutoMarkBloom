@@ -27,7 +27,7 @@ await page.click("#sibling"); await page.waitForTimeout(300); await page.evaluat
 if (process.env.DEV_JSON) {
   await page.goto(`http://localhost:5193/?src=${process.env.DEV_JSON}`);
   await page.waitForFunction(() => window.automark?.flower, null, { timeout: 60000 });
-  await set("colour", "layer");
+  await set("colour", "schematic");
   for (const f of [0, 6, 12]) { await page.evaluate((f) => window.automark.setTime(f), f); await shot(`c_dev_${f}`); }
   await set("section", "vertical"); await page.evaluate(() => window.automark.setTime(0)); await shot("c_dev_section0");
 }

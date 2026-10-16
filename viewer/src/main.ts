@@ -35,6 +35,12 @@ const petalMat = new THREE.MeshPhysicalMaterial({
   vertexColors: true, roughness: 0.5, side: THREE.DoubleSide, sheen: 1, sheenRoughness: 0.4,
   sheenColor: new THREE.Color("#ffd7e4"), transmission: 0.0, thickness: 0.05,
 });
+// Schematic view: translucent petals tinted by layer, with crisp outlines, so
+// the inner layers show through the outer ones.
+const schematicMat = new THREE.MeshStandardMaterial({
+  vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, transparent: true, opacity: 0.22, depthWrite: false,
+});
+const rimMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
 const coreMat = new THREE.MeshStandardMaterial({ color: "#e7c25a", roughness: 0.8 });
 const shellMat = new THREE.MeshBasicMaterial({ color: "#b2456c", wireframe: true, transparent: true, opacity: 0.12 });
 const sepalMat = new THREE.MeshBasicMaterial({ color: "#3f7d4f", wireframe: true, transparent: true, opacity: 0.25 });
@@ -48,8 +54,8 @@ let playing = false;
 function show(doc: FlowerDoc, label: string) {
   group.clear();
   flower?.dispose();
-  flower = new FlowerMesh(doc, petalMat);
-  group.add(flower.mesh);
+  flower = new FlowerMesh(doc, petalMat, rimMat);
+  group.add(flower.mesh, flower.rims);
   const { aspect, core, radius } = doc.shells;
   const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(core * 0.97, 48, 32), coreMat);
   coreMesh.scale.set(1, aspect, 1);
@@ -70,7 +76,7 @@ function show(doc: FlowerDoc, label: string) {
   // Colour menu: natural, by layer, then every declared channel.
   const sel = $<HTMLSelectElement>("colour");
   const keep = sel.value;
-  sel.replaceChildren(new Option("Natural", "natural"), new Option("By layer", "layer"));
+  sel.replaceChildren(new Option("Natural", "natural"), new Option("Schematic (translucent)", "schematic"));
   for (const c of flower.channels.decls) {
     const o = new Option(`${c.name} (${c.scope}${c.kind ? `, ${c.kind}` : ""})`, c.name);
     sel.appendChild(o);
@@ -124,7 +130,7 @@ function setTime(t: number) {
 // ---- Bud views: colour by layer, exploded, peel, cross-section ----
 
 const clipPlane = new THREE.Plane();
-const clipMaterials: THREE.Material[] = [petalMat, coreMat, shellMat, sepalMat];
+const clipMaterials: THREE.Material[] = [petalMat, schematicMat, rimMat, coreMat, shellMat, sepalMat];
 
 function currentSection(): Section | null {
   const kind = $<HTMLSelectElement>("section").value;
@@ -191,6 +197,9 @@ function applyViews() {
   $("peelVal").textContent = k === flower.layerCount ? `all ${k}` : `inner ${k} of ${flower.layerCount}`;
   const mode = $<HTMLSelectElement>("colour").value;
   flower.setColorMode(mode, time);
+  const schematic = mode === "schematic";
+  flower.mesh.material = schematic ? schematicMat : petalMat;
+  flower.rims.visible = schematic;
   colourLegend(mode);
   flower.setTime(time);
   updateSection();
@@ -299,7 +308,7 @@ $("shells").addEventListener("change", (e) => {
   const s = group.getObjectByName("shells");
   if (s) s.visible = (e.target as HTMLInputElement).checked;
 });
-$("wire").addEventListener("change", (e) => (petalMat.wireframe = (e.target as HTMLInputElement).checked));
+$("wire").addEventListener("change", (e) => (petalMat.wireframe = schematicMat.wireframe = (e.target as HTMLInputElement).checked));
 $("glbStatic").addEventListener("click", async () => {
   if (flower) download(await exportStatic(flower, time), `automark-${flower.doc.seed}-step${Math.round(time)}.glb`);
 });
