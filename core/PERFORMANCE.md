@@ -61,3 +61,9 @@ Seed 11 flower 0, 24 frames, measured natively:
 | 120 iterations, dt_max 0.03 (old) | 41.4 s | 308.6 | 0.74 t |
 | **60, 0.06 (new default)** | **27.2 s** | **313.8** | **0.68 t** |
 | 40, 0.1 | 23.8 s | 308.6 | 0.74 t (worst 0.78 t) |
+- **Per-petal contact refresh.** Contact pairs are now refreshed only for petals that moved
+  more than half the Verlet skin, together with any petal that moved more than a quarter of
+  it, so refreshes come in batches. Kept pairs stay exact because their two petals have
+  together moved less than the skin. Output is byte-identical. Seed 11 from bud to open went
+  from 47 s to 42.5 s. Widening the skin or changing the batching threshold made no
+  difference, so what's left is mostly the energy evaluations themselves.

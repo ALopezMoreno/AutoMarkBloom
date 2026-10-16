@@ -72,6 +72,8 @@ pub struct Flower {
     /// Concatenated poses of the last step.
     pub pose: Vec<[f64; 3]>,
     pub contacts: Contacts,
+    /// Node positions at their petal's last contact refresh.
+    anchor: Vec<[f64; 3]>,
     pub shells: Shells,
     pub cap: f64,
 }
@@ -104,9 +106,16 @@ impl Flower {
         }
         let cap = thick.iter().cloned().fold(0.0, f64::max);
         let layout: Vec<_> = grids.iter().zip(&offset).map(|(g, &o)| (o, g.nu, g.nv)).collect();
-        let contacts = Contacts::new(&layout, s.contact_samples);
-        let pose = x.clone();
-        Flower { petals, offset, x, thick, owner, pose, contacts, shells: shells.clone(), cap }
+        let mut contacts = Contacts::new(&layout, s.contact_samples);
+        contacts.rebuild(&x, Self::skin_reach(cap).1);
+        let (pose, anchor) = (x.clone(), x.clone());
+        Flower { petals, offset, x, thick, owner, pose, contacts, anchor, shells: shells.clone(), cap }
+    }
+
+    /// Verlet skin and contact search reach for a thickness cap.
+    fn skin_reach(cap: f64) -> (f64, f64) {
+        let skin = 0.5 * cap;
+        (skin, cap + skin)
     }
 
     /// Energy and gradient toward the given targets (`pose` concatenated).
@@ -187,23 +196,15 @@ impl Flower {
             add_scaled(&mut x[i], 1.0, d);
         }
         self.pose = pose;
-        let pose = &self.pose;
+        let pose = &self.pose.clone();
         let max_step = 0.25 * self.cap;
-        let skin = 0.5 * self.cap;
-        let reach = self.cap + skin;
-        let mut contacts = std::mem::replace(&mut self.contacts, Contacts::new(&[], 1));
-        contacts.rebuild(&x, reach);
-        self.contacts = contacts;
-        let mut anchor = x.clone();
+        let (skin, reach) = Self::skin_reach(self.cap);
+        self.refresh_contacts(&x, reach, skin);
         let mut grad = vec![[0.0; 3]; n_nodes];
         let mut vel = vec![[0.0f64; 3]; n_nodes];
         let (mut dt, mut alpha, mut npos) = (s.dt_max * 0.5, 0.1, 0usize);
         for _ in 0..s.iterations {
-            let moved = x.iter().zip(&anchor).map(|(p, q)| norm(sub(*p, *q))).fold(0.0, f64::max);
-            if moved * 2.0 > skin {
-                self.contacts.rebuild(&x, reach);
-                anchor.copy_from_slice(&x);
-            }
+            self.refresh_contacts(&x, reach, skin);
             self.energy(&x, t, pose, s, &mut grad);
             for (i, g) in grad.iter_mut().enumerate() {
                 if self.pinned(i) {
@@ -252,10 +253,32 @@ impl Flower {
                 }
             }
         }
-        self.contacts.rebuild(&x, reach);
+        self.refresh_contacts(&x, reach, skin);
         self.x = x;
         let x = self.x.clone();
         self.energy(&x, t, &self.pose, s, &mut grad)
+    }
+
+    /// Refresh contact pairs for the petals that moved more than half the
+    /// skin since their last refresh (see `Contacts::refresh`), and with
+    /// them any petal that moved more than a quarter of it.
+    fn refresh_contacts(&mut self, x: &[[f64; 3]], reach: f64, skin: f64) {
+        let n = self.petals.len();
+        let mut moved = vec![0.0f64; n];
+        for (i, (p, q)) in x.iter().zip(&self.anchor).enumerate() {
+            moved[self.owner[i]] = moved[self.owner[i]].max(norm(sub(*p, *q)));
+        }
+        // Once any petal must refresh, take those halfway there along too,
+        // so refreshes come in batches rather than one petal at a time.
+        if moved.iter().any(|&d| d * 2.0 > skin) {
+            let dirty: Vec<bool> = moved.iter().map(|&d| d * 4.0 > skin).collect();
+            self.contacts.refresh(x, reach, &dirty);
+            for (i, a) in self.anchor.iter_mut().enumerate() {
+                if dirty[self.owner[i]] {
+                    *a = x[i];
+                }
+            }
+        }
     }
 
     /// Worst overlap of two petals, in units of the thickness cap.

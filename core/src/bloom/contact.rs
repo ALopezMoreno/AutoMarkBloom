@@ -84,12 +84,29 @@ impl Contacts {
 
     /// Rebuild the candidate list: samples within `reach` of a triangle of another petal.
     pub fn rebuild(&mut self, x: &[[f64; 3]], reach: f64) {
+        let all = vec![true; self.tri_petal.last().map_or(0, |&p| p + 1)];
+        self.refresh(x, reach, &all);
+    }
+
+    /// Rebuild only the pairs that involve a `dirty` petal (as sample or as
+    /// triangle) and keep the rest. With a Verlet skin this is exact if every
+    /// petal that moved more than half the skin since its last refresh is
+    /// dirty: a kept pair's two petals have together moved less than the
+    /// skin since it was found. The list stays sorted.
+    pub fn refresh(&mut self, x: &[[f64; 3]], reach: f64, dirty: &[bool]) {
         let cell = 0.25f64.max(reach);
         let key = |v: f64| math::floor(v / cell) as i64;
+        // Every sample, for the dirty petals' triangles; only the dirty
+        // petals' samples, for the other triangles.
         let mut grid: BTreeMap<(i64, i64, i64), Vec<usize>> = BTreeMap::new();
+        let mut dirty_grid: BTreeMap<(i64, i64, i64), Vec<usize>> = BTreeMap::new();
         let pts: Vec<[f64; 3]> = self.samples.iter().map(|s| s.at(x)).collect();
         for (i, p) in pts.iter().enumerate() {
-            grid.entry((key(p[0]), key(p[1]), key(p[2]))).or_default().push(i);
+            let k = (key(p[0]), key(p[1]), key(p[2]));
+            if dirty[self.samples[i].petal] {
+                dirty_grid.entry(k).or_default().push(i);
+            }
+            grid.entry(k).or_default().push(i);
         }
         let mut out = Vec::new();
         for (ti, &[a, b, c]) in self.tris.iter().enumerate() {
@@ -102,6 +119,7 @@ impl Contacts {
                 }
             }
             let owner = self.tri_petal[ti];
+            let grid = if dirty[owner] { &grid } else { &dirty_grid };
             for gx in key(lo[0])..=key(hi[0]) {
                 for gy in key(lo[1])..=key(hi[1]) {
                     for gz in key(lo[2])..=key(hi[2]) {
@@ -121,6 +139,9 @@ impl Contacts {
                 }
             }
         }
+        let samples = &self.samples;
+        let tri_petal = &self.tri_petal;
+        out.extend(self.cands.iter().filter(|&&(si, ti)| !dirty[samples[si].petal] && !dirty[tri_petal[ti]]));
         out.sort_unstable();
         self.cands = out;
     }
