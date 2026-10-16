@@ -248,9 +248,10 @@ corresponds to a contact force of $k_{\mathrm{contact}}\,\tmax/4$.
   $R_{\mathrm{rest}} = R_{\mathrm{env}}\bigl(1 + g_s\,g/G\bigr)$; relax.
 \item \textbf{Settle.} After the last stage, relax for longer.
 \end{enumerate}
-Defaults: 60 relaxation iterations per stage and 150 to settle. The fast
-preview preset uses 25 and 50 (not canonical, \cref{sec:output}); tests use 15
-and 15.
+Defaults: 30 relaxation iterations per stage and 75 to settle. Twice that
+leaves the bud about 15\% lower in energy with the same overlaps, at twice the
+cost. The fast preview preset uses 12 and 30 (not canonical,
+\cref{sec:output}); tests use 15 and 15.
 
 \paragraph{Coarse to fine.} The first $\lfloor 0.7\,G\rfloor$ stages only set
 the bud's broad shape, so they are relaxed on every other control point (a

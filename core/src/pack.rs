@@ -39,7 +39,7 @@ pub struct PackSettings {
 
 impl Default for PackSettings {
     fn default() -> Self {
-        PackSettings { relax_iterations: 60, settle_iterations: 150, dt_max: 0.3, record_frames: false, coarse_fraction: 0.7 }
+        PackSettings { relax_iterations: 30, settle_iterations: 75, dt_max: 0.3, record_frames: false, coarse_fraction: 0.7 }
     }
 }
 
@@ -49,12 +49,12 @@ impl PackSettings {
         PackSettings { relax_iterations: 15, settle_iterations: 15, ..Self::default() }
     }
 
-    /// About two and a half times faster than the default, for browsing buds
+    /// About twice as fast as the default, for browsing buds
     /// interactively. Same plant, flower traits, petal layout and growth
     /// automaton draws, but the packing is less settled, so the geometry
     /// (and channels derived from it) differs slightly from the canonical bud.
     pub fn preview() -> Self {
-        PackSettings { relax_iterations: 25, settle_iterations: 50, ..Self::default() }
+        PackSettings { relax_iterations: 12, settle_iterations: 30, ..Self::default() }
     }
 }
 

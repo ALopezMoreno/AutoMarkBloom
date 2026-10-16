@@ -110,6 +110,23 @@ Seed 11 flower 0, 24 frames, measured natively:
   re-sorting. Output is byte-identical (checked on seeds 11 and 2027). Seed 11 from seed to
   open went from 35 s to 29 s.
 
+## Half the relaxation steps (changes output)
+
+The bud now relaxes 30 iterations per stage and 75 to settle (was 60 and 150). Final energy is
+about 15% higher (less relaxed), and overlaps and band excess are unchanged. The crumpled
+character is kept (compared on seeds 11 and 2027). The preview preset went from 25/50 to 12/30
+so it stays about twice as fast as the default. Golden digests re-blessed.
+
+| Bud, one thread | 60 / 150 | 30 / 75 |
+|---|---|---|
+| seed 11 | 7.5 s, E 18094, overlap 0.60 t | 4.6 s, E 21245, overlap 0.61 t |
+| seed 2027 | 5.5 s, E 22476, overlap 0.63 t | 2.6 s, E 25000, overlap 0.63 t |
+| seed 7 | 4.3 s, E 8748, overlap 0.78 t | 2.2 s, E 9492, overlap 0.75 t |
+
+An L-BFGS solver (preconditioned with the same per-node masses, backtracking line search) was
+also tried. With the same number of energy evaluations it reached about 15–25% lower energy,
+but its longer steps doubled the contact rebuilds, so per second it was no better than FIRE.
+
 ## Deterministic threads (output unchanged)
 
 Contact search (bud and opening) and contact detection (which pairs touch, in both energies)
