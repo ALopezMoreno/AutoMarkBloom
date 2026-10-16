@@ -12,7 +12,7 @@ const t0 = Date.now();
 await page.goto(`http://localhost:5191/?src=samples/flower_11_0.amb.txt`);
 await page.waitForFunction(() => window.automark?.flower, null, { timeout: 120000 });
 console.log("loaded in", Date.now() - t0, "ms; frames", await page.evaluate(() => window.automark.flower.frameCount), await page.evaluate(() => document.getElementById("err").textContent));
-console.log("probe", JSON.stringify(await page.evaluate(() => { const d = window.automark.flower.doc; return [0, 37].map((f) => Array.from(d.frames[f].petals[54].mid.slice(600, 603)).concat(d.frames[f].petals[54].thick[300])); })));
+console.log("probe", JSON.stringify(await page.evaluate(() => { const d = window.automark.flower.doc; return [0, d.frames.length - 1].map((f) => Array.from(d.frames[f].petals.at(-1).mid.slice(600, 603)).concat(d.frames[f].petals.at(-1).thick[300])); })));
 console.log("smooth step 20.5 ok", await page.evaluate(() => { window.automark.setTime(20.5); return !document.getElementById("err").textContent; }));
 for (const f of [0, 12, 20, 28, 37]) {
   await page.evaluate((f) => window.automark.setTime(f), f);

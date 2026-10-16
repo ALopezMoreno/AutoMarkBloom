@@ -18,6 +18,6 @@ Data format: [FORMAT.md](FORMAT.md). Code: `format.ts` (types and validation), `
 
 ## Bud-to-open sample
 
-The wasm build does not expose the opening stage yet, so `public/samples/flower_11_0.amb.txt` is a precomputed native run (`automark --seed 11 --flower 0 --frames --open 12 --json out.json`), stored in the compact `.amb` form described in [FORMAT.md](FORMAT.md#compact-files-amb) (all steps, 5.2 MB instead of 54 MB). To refresh it from the shared export, run `npm run sample` (set `SRC` to use another file), then `npm run build`. The viewer also opens `.amb`, `.amb.txt` and gzipped JSON files through Load and drag-and-drop.
+The wasm build does not expose the opening stage yet, so `public/samples/flower_11_0.amb.txt` is a precomputed native run (`automark --seed 11 --flower 0 --frames --open 24 --json out.json`), stored in the compact `.amb` form described in [FORMAT.md](FORMAT.md#compact-files-amb) (all steps, 5.2 MB instead of 54 MB). To refresh it from the shared export, run `npm run sample` (set `SRC` to use another file), then `npm run build`. The viewer also opens `.amb`, `.amb.txt` and gzipped JSON files through Load and drag-and-drop.
 
 Playback draws a Catmull-Rom curve through the saved steps ("Smooth motion between steps" under More options), so motion has no corners at the steps. Turn it off to see straight-line interpolation.
