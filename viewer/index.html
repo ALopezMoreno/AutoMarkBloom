@@ -81,7 +81,7 @@
 </div>
 <div id="panel">
   <h1>AutoMarkBloom</h1>
-  <div class="row"><label for="source">Flower</label><select id="source"><option value="core" hidden>Rust core (any seed)</option><option value="stub">Stub (any seed)</option><option value="samples/flower_11_0.json">Core, seed 11, bud to open</option><option value="samples/bud_11.json">Core bud, seed 11</option><option value="samples/bud_2027.json">Core bud, seed 2027</option></select></div>
+  <div class="row"><label for="source">Flower</label><select id="source"><option value="core" hidden>Rust core (any seed)</option><option value="stub">Stub (any seed)</option><option value="samples/flower_11_0.amb.txt">Core, seed 11, bud to open</option><option value="samples/bud_11.json">Core bud, seed 11</option><option value="samples/bud_2027.json">Core bud, seed 2027</option></select></div>
   <div class="row" id="seedRow"><label for="seed">Seed</label><input id="seed" type="number" value="7" min="0" /><button id="reroll" title="Random seed">Random</button></div>
   <div class="row" id="flowerRow"><label for="flowerIdx" title="Sibling flowers on the same plant">Flower #</label><input id="flowerIdx" type="number" value="0" min="0" step="1" /><button id="sibling" title="Next sibling flower on this plant">Next sibling</button></div>
   <label id="fullRow" title="Off: fast preview packing. On: the full, canonical bud (much slower)."><input id="fullBud" type="checkbox" /> Full-quality bud (slower)</label>
@@ -104,9 +104,10 @@
   </div></details>
   <details id="more" open><summary>More options</summary><div class="more">
   <div class="row"><label for="speed">Speed</label><select id="speed"><option value="4">4 steps/s</option><option value="12" selected>12 steps/s</option><option value="24">24 steps/s</option></select></div>
+  <label title="Curved interpolation between saved steps; off draws straight lines between them"><input id="smooth" type="checkbox" checked /> Smooth motion between steps</label>
   <div class="row"><label><input id="shells" type="checkbox" /> Shells</label><label><input id="wire" type="checkbox" /> Wireframe</label></div>
   <div class="row"><button id="glbStatic">Export pose .glb</button><button id="glbAnim">Export opening .glb</button></div>
-  <div class="row"><button id="load">Load core JSON…</button><input id="file" type="file" accept=".json,application/json" hidden /></div>
+  <div class="row"><button id="load">Load core JSON…</button><input id="file" type="file" accept=".json,.amb,.txt,.gz,application/json" hidden /></div>
   </div></details>
   <div id="info"></div>
   <div id="err"></div>

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { validate, type FlowerDoc } from "./format";
+import { decodeAmb, isAmb } from "./amb";
 import { FlowerMesh } from "./mesh";
 import { stubFlower } from "./stub";
 import { coreAvailable, growBud } from "./core";
@@ -59,6 +60,7 @@ function show(doc: FlowerDoc, label: string) {
   group.clear();
   flower?.dispose();
   flower = new FlowerMesh(doc, petalMat, rimMat);
+  flower.smooth = $<HTMLInputElement>("smooth").checked;
   group.add(flower.mesh, flower.rims);
   const { aspect, core, radius } = doc.shells;
   const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(core * 0.97, 48, 32), coreMat);
@@ -284,21 +286,30 @@ function markFileSource(name: string) {
   $("fullRow").style.display = "none";
 }
 
-/** Fetch a flower file; `.gz` files are gunzipped in the browser so big samples stay small to ship. */
-async function fetchText(url: string): Promise<string> {
+/** Turn file bytes into a flower document: compact .amb (raw or base64), gzipped JSON, or JSON. */
+async function parseBytes(bytes: Uint8Array): Promise<any> {
+  if (isAmb(bytes)) return decodeAmb(bytes);
+  // A host may already have decoded gzip (Content-Encoding), so go by the magic bytes, not the name.
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b)
+    return JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text());
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+async function fetchDoc(url: string): Promise<any> {
   $("info").textContent = `Loading ${url}…`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${url}: ${r.status} ${r.statusText}`);
   const bytes = new Uint8Array(await r.arrayBuffer());
-  // A host may already have decoded it (Content-Encoding), so go by the gzip magic bytes, not the name.
-  if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return new TextDecoder().decode(bytes);
-  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+  const t0 = performance.now();
+  const doc = await parseBytes(bytes);
+  console.info(`${url}: ${(bytes.length / 1e6).toFixed(1)} MB decoded in ${Math.round(performance.now() - t0)} ms`);
+  return doc;
 }
 
-async function loadJsonText(text: string, name: string) {
+async function loadDoc(doc: Promise<any>, name: string) {
   try {
     if (![...sourceSel.options].some((o) => o.value !== "file" && (o.text === name || o.value === name))) markFileSource(name);
-    show(validate(JSON.parse(text)), name);
+    show(validate(await doc), name);
   } catch (e) {
     $("err").textContent = String((e as Error).message ?? e);
   }
@@ -314,7 +325,7 @@ $("source").addEventListener("change", async (e) => {
   $("fullRow").style.display = v === "core" ? "" : "none";
   if (seeded) return loadSeed($<HTMLInputElement>("seed").value);
   try {
-    loadJsonText(await fetchText(v), sourceSel.selectedOptions[0].text);
+    await loadDoc(fetchDoc(v), sourceSel.selectedOptions[0].text);
   } catch (err) {
     $("err").textContent = String(err);
   }
@@ -352,6 +363,11 @@ $("shells").addEventListener("change", (e) => {
 $("plantParts").addEventListener("change", (e) => {
   if (plant) plant.group.visible = (e.target as HTMLInputElement).checked;
 });
+$("smooth").addEventListener("change", (e) => {
+  if (!flower) return;
+  flower.smooth = (e.target as HTMLInputElement).checked;
+  setTime(time);
+});
 $("wire").addEventListener("change", (e) => (petalMat.wireframe = schematicMat.wireframe = (e.target as HTMLInputElement).checked));
 $("glbStatic").addEventListener("click", async () => {
   if (flower) download(await exportStatic(flower, time), `automark-${flower.doc.seed}-step${Math.round(time)}.glb`);
@@ -362,7 +378,7 @@ $("glbAnim").addEventListener("click", async () => {
 $("load").addEventListener("click", () => $("file").click());
 $("file").addEventListener("change", async (e) => {
   const f = (e.target as HTMLInputElement).files?.[0];
-  if (f) loadJsonText(await f.text(), f.name);
+  if (f) loadDoc(f.arrayBuffer().then((b) => parseBytes(new Uint8Array(b))), f.name);
 });
 addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("dragging"); });
 addEventListener("dragleave", () => document.body.classList.remove("dragging"));
@@ -370,7 +386,7 @@ addEventListener("drop", async (e) => {
   e.preventDefault();
   document.body.classList.remove("dragging");
   const f = e.dataTransfer?.files?.[0];
-  if (f) loadJsonText(await f.text(), f.name);
+  if (f) loadDoc(f.arrayBuffer().then((b) => parseBytes(new Uint8Array(b))), f.name);
 });
 
 // The canvas fills #app, which is the whole window on desktop and the space
@@ -410,7 +426,7 @@ const src = q.get("src");
 if (src) {
   const opt = [...$<HTMLSelectElement>("source").options].find((o) => o.value === src);
   if (opt) { sourceSel.value = src; $("seedRow").style.display = "none"; $("flowerRow").style.display = "none"; $("fullRow").style.display = "none"; }
-  fetchText(src).then((t) => loadJsonText(t, src)).catch((e) => ($("err").textContent = String(e)));
+  loadDoc(fetchDoc(src), src);
 } else {
   const seed = q.get("seed") ?? "7";
   $<HTMLInputElement>("seed").value = seed;
