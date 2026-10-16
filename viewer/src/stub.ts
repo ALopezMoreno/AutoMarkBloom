@@ -170,7 +170,7 @@ export function stubFlower(seed: number, flowerIndex = 0, frames = 48, nu = 14, 
       return {
         t,
         stage: t === 0 ? "bud" : "open",
-        channels: f === 0 ? { vigour, sepal_radius: (1 + slot * layers) * vigour } : ({ sepal_radius: (1 + slot * layers) * vigour * (1 + 1.5 * smooth(t / 0.4)) } as Record<string, number>),
+        channels: f === 0 ? { vigour, sepal_radius: (1 + slot * layers) * vigour } : ({ sepal_radius: (1 + slot * layers) * vigour * (1 + 0.25 * smooth(t / 0.4)) } as Record<string, number>),
         petals: fr.map((pf, i) =>
           f === 0 ? { ...pf, channels: { onset: (1 - petals[i].info.layer / Math.max(1, layers - 1)) * 0.45 + petals[i].delay, petal_type: petals[i].type } } : pf,
         ),
