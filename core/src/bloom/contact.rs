@@ -28,6 +28,9 @@ pub struct Contacts {
     pub tri_petal: Vec<usize>,
     /// (sample, triangle) pairs within reach at the last rebuild.
     pub cands: Vec<(usize, usize)>,
+    /// Per pair, a lower bound on its distance with every node at its
+    /// anchor (see `refresh`), so `energy` can skip pairs that cannot touch.
+    bound: Vec<f64>,
 }
 
 fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
@@ -79,13 +82,13 @@ impl Contacts {
                 }
             }
         }
-        Contacts { samples, tris, tri_petal, cands: vec![] }
+        Contacts { samples, tris, tri_petal, cands: vec![], bound: vec![] }
     }
 
     /// Rebuild the candidate list: samples within `reach` of a triangle of another petal.
     pub fn rebuild(&mut self, x: &[[f64; 3]], reach: f64) {
         let all = vec![true; self.tri_petal.last().map_or(0, |&p| p + 1)];
-        self.refresh(x, reach, &all);
+        self.refresh(x, reach, &all, x);
     }
 
     /// Rebuild only the pairs that involve a `dirty` petal (as sample or as
@@ -93,7 +96,13 @@ impl Contacts {
     /// petal that moved more than half the skin since its last refresh is
     /// dirty: a kept pair's two petals have together moved less than the
     /// skin since it was found. The list stays sorted.
-    pub fn refresh(&mut self, x: &[[f64; 3]], reach: f64, dirty: &[bool]) {
+    ///
+    /// `anchor` holds each node's position at its petal's last refresh,
+    /// already updated for the dirty petals. Each new pair stores its
+    /// distance minus how far its nodes are from their anchors, a lower
+    /// bound on the distance at the anchors.
+    pub fn refresh(&mut self, x: &[[f64; 3]], reach: f64, dirty: &[bool], anchor: &[[f64; 3]]) {
+        let moved = |v: usize| norm(sub(x[v], anchor[v]));
         let cell = 0.25f64.max(reach);
         let key = |v: f64| math::floor(v / cell) as i64;
         // Every sample, for the dirty petals' triangles; only the dirty
@@ -131,8 +140,11 @@ impl Contacts {
                             }
                             let w = closest_on_triangle(p, x[a], x[b], x[c]);
                             let q = [0, 1, 2].map(|k| w[0] * x[a][k] + w[1] * x[b][k] + w[2] * x[c][k]);
-                            if norm(sub(p, q)) < reach {
-                                out.push((i, ti));
+                            let d = norm(sub(p, q));
+                            if d < reach {
+                                let ms = self.samples[i].nodes.iter().map(|&v| moved(v)).fold(0.0, f64::max);
+                                let mt = [a, b, c].iter().map(|&v| moved(v)).fold(0.0, f64::max);
+                                out.push((i, ti, d - ms - mt));
                             }
                         }
                     }
@@ -141,26 +153,36 @@ impl Contacts {
         }
         let samples = &self.samples;
         let tri_petal = &self.tri_petal;
-        out.extend(self.cands.iter().filter(|&&(si, ti)| !dirty[samples[si].petal] && !dirty[tri_petal[ti]]));
-        out.sort_unstable();
-        self.cands = out;
+        out.extend(self.cands.iter().zip(&self.bound).filter(|(&(si, ti), _)| !dirty[samples[si].petal] && !dirty[tri_petal[ti]]).map(|(&(si, ti), &b)| (si, ti, b)));
+        out.sort_unstable_by_key(|&(si, ti, _)| (si, ti));
+        self.cands = out.iter().map(|&(si, ti, _)| (si, ti)).collect();
+        self.bound = out.iter().map(|&(_, _, b)| b).collect();
     }
 
     fn thick_at(&self, s: &Sample, thick: &[f64]) -> f64 {
         (0..4).map(|k| s.w[k] * thick[s.nodes[k]]).sum()
     }
 
-    /// Contact energy; adds its gradient into `grad`.
-    pub fn energy(&self, x: &[[f64; 3]], thick: &[f64], k: f64, grad: &mut [[f64; 3]]) -> f64 {
+    /// Contact energy; adds its gradient into `grad`. `anchor` is as in
+    /// `refresh`: a pair whose stored bound, less how far its nodes have
+    /// since moved from their anchors, is still at least the contact
+    /// distance cannot be touching and is skipped without the exact test.
+    pub fn energy(&self, x: &[[f64; 3]], thick: &[f64], k: f64, grad: &mut [[f64; 3]], anchor: &[[f64; 3]]) -> f64 {
+        let moved: Vec<f64> = x.iter().zip(anchor).map(|(p, q)| norm(sub(*p, *q))).collect();
         let mut e = 0.0;
-        for &(si, ti) in &self.cands {
+        for (&(si, ti), &bound) in self.cands.iter().zip(&self.bound) {
             let s = &self.samples[si];
             let [a, b, c] = self.tris[ti];
+            let tq = (thick[a] + thick[b] + thick[c]) / 3.0;
+            let dmin = 0.5 * (self.thick_at(s, thick) + tq);
+            let ms = s.nodes.iter().map(|&v| moved[v]).fold(0.0, f64::max);
+            let mt = moved[a].max(moved[b]).max(moved[c]);
+            if bound - ms - mt - 1e-9 >= dmin {
+                continue;
+            }
             let p = s.at(x);
             let w = closest_on_triangle(p, x[a], x[b], x[c]);
             let q = [0, 1, 2].map(|m| w[0] * x[a][m] + w[1] * x[b][m] + w[2] * x[c][m]);
-            let tq = (thick[a] + thick[b] + thick[c]) / 3.0;
-            let dmin = 0.5 * (self.thick_at(s, thick) + tq);
             let d = norm(sub(p, q));
             if d >= dmin {
                 continue;

@@ -83,3 +83,9 @@ Seed 11 flower 0, 24 frames, measured natively:
   The 60-iteration carried-over row shows the solver's own noise: about 0.4 t RMS. At 20
   iterations the change is barely above that, and every layer's opening angle and incurve
   is unchanged. Blending the targets over several settling steps within a frame didn't help.
+- **Exact contact skip and a wider skin** (from the Performance thread's bud-side #23). Each
+  contact pair stores a lower bound on its distance with every node at its anchor. Energy
+  skips a pair while that bound, less how far its nodes have since moved, is still at least
+  the contact distance. With most pairs skipped, a skin of 1.0 cap (was 0.5) costs little
+  and means fewer refreshes. Output is byte-identical. Seed 11 from seed to open went from
+  39 s to 35 s. A skin of 1.5 cap gave the same time, and 2.0 cap was slower.

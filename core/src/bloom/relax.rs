@@ -121,7 +121,7 @@ impl Flower {
 
     /// Verlet skin and contact search reach for a thickness cap.
     fn skin_reach(cap: f64) -> (f64, f64) {
-        let skin = 0.5 * cap;
+        let skin = cap;
         (skin, cap + skin)
     }
 
@@ -171,7 +171,7 @@ impl Flower {
             e += 0.5 * s.k_pose * (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
             add_scaled(&mut grad[i], s.k_pose, d);
         }
-        e += self.contacts.energy(x, &self.thick, s.k_contact, grad);
+        e += self.contacts.energy(x, &self.thick, s.k_contact, grad, &self.anchor);
         let sh = &self.shells;
         for (i, &xi) in x.iter().enumerate() {
             let inn = (sh.core + 0.5 * self.thick[i]) - sh.scaled_radius(xi);
@@ -282,12 +282,12 @@ impl Flower {
         // so refreshes come in batches rather than one petal at a time.
         if moved.iter().any(|&d| d * 2.0 > skin) {
             let dirty: Vec<bool> = moved.iter().map(|&d| d * 4.0 > skin).collect();
-            self.contacts.refresh(x, reach, &dirty);
             for (i, a) in self.anchor.iter_mut().enumerate() {
                 if dirty[self.owner[i]] {
                     *a = x[i];
                 }
             }
+            self.contacts.refresh(x, reach, &dirty, &self.anchor);
         }
     }
 
