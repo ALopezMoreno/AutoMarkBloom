@@ -1,0 +1,12 @@
+[package]
+name = "ca-trace"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Docs helper: records every step of the shell automaton for one flower"
+
+[workspace]
+
+[dependencies]
+automark-core = { path = "../../../core" }
+serde_json = "1"

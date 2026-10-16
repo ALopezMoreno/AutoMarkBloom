@@ -1,5 +1,5 @@
 \section{Output: the flower JSON}\label{sec:output}
-\stagebox{\statusbuilt}{\src{core/src/export.rs}, \src{core/src/channels.rs}, \src{viewer/FORMAT.md}, \src{viewer/src/mesh.ts}}
+\stagebox{\statusbuilt}{\src{core/src/export.rs}, \src{core/src/bloom/export.rs}, \src{core/src/channels.rs}, \src{core/src/bin/automark.rs}, \src{viewer/FORMAT.md}, \src{viewer/src/mesh.ts}}
 
 The core's one canonical output is a JSON document (format
 \texttt{automark-flower}, version 1) shared with the viewer. The core owns the
@@ -10,7 +10,12 @@ geometry; the viewer only meshes, shades, animates and exports glTF.
 \item \texttt{seed} as a decimal string (JavaScript numbers lose precision
   above $2^{53}$), \texttt{flower\_index}, units of the core radius and $+z$
   up.
-\item \texttt{shells}: aspect, slot width, layer radii $a_k$, core and envelope.
+\item \texttt{shells}: \texttt{aspect} ($\alpha$), \texttt{egg} ($\eta_e$),
+  \texttt{point} ($\eta_p$), \texttt{slot} ($w$), \texttt{radius} (the layer
+  radii $a_k$), \texttt{core} ($R_0$) and \texttt{envelope}. A reader rebuilds
+  any shell as $|\mathbf q| = a\,g(c)$ (\cref{sec:shells}); a missing
+  \texttt{egg} or \texttt{point} means 0. The attachment and top angles are
+  not written.
 \item \texttt{grid}: samples per petal, \texttt{nu} from base to tip and
   \texttt{nv} from one edge to the other. The core evaluates each sheet with
   2 samples per span in both directions, giving $18\cdot2+1 = 37$ by
@@ -25,14 +30,39 @@ geometry; the viewer only meshes, shades, animates and exports glTF.
   growth stages come first, from $t=-1$ (first stage) up to $t=0$, each with
   its own \texttt{sepal\_radius}. Every channel's value is written in the first
   frame (per petal for petal channels, per frame for flower channels); a later
-  frame that omits a channel keeps its last value. Flowering will add frames
-  with $t>0$ and the same topology, so the whole sequence plays back smoothly
-  and exports as an animated glTF.
-\item \texttt{meta}: the species, the plant's traits, the flower's traits and
-  the development report.
+  frame that omits a channel keeps its last value. Every bud frame carries
+  \texttt{stage: "bud"}.
+
+  When the flower is opened (\cref{sec:flowering}), one frame per opening
+  step is appended with \texttt{stage: "open"} and $t = k/N$ for
+  $k = 1,\dots,N$ ($N = 24$ by default). Each petal entry holds its
+  \texttt{mid} points, \texttt{thick}ness and \texttt{channels}, and each frame
+  its flower-scope \texttt{channels}. The opening's exported channels
+  (\texttt{vigour} per flower; \texttt{onset}, \texttt{rate},
+  \texttt{length} and \texttt{width} per petal) are added to the top-level
+  declaration, skipping names the bud already declared. The topology never
+  changes and the across direction is fixed once on the bud, so the whole
+  sequence plays back smoothly and exports as an animated glTF.
+\item \texttt{meta}: the species (without its opening shape, which is not
+  written), the plant's traits, the flower's traits and the development
+  report.
 \end{itemize}
 All numbers are rounded to $10^{-5}$, far below petal
 thickness, which keeps files small.
+
+\subsection{Producing it}
+The command-line tool writes one flower:
+\begin{center}\small
+\texttt{automark --seed N [--flower K] --json out.json [--species file.json]}\\
+\texttt{[--relax N] [--preview] [--frames] [--open N]}
+\end{center}
+\texttt{--frames} records the development stages, \texttt{--open N} runs the
+opening over $N$ frames, and \texttt{--species} reads a species JSON instead of
+the built-in peony. \texttt{--preview} uses the fast preset (25 relaxation and
+50 settling iterations instead of 60 and 150): about 2.5 times faster, but its
+geometry and channels differ slightly, so it is not canonical and not covered
+by the golden digests (\cref{sec:determinism}). The browser build exposes the
+same outputs (canonical bud, preview bud and opened flower).
 
 \subsection{Orientation}
 The surface normal $\partial_u \x \times \partial_v \x$ must point away from the

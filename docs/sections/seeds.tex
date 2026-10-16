@@ -70,6 +70,22 @@ species-specific numbers live in the species; nothing peony-specific is
 hard-coded anywhere else. Peony is the built-in preset; other species are JSON
 files with the same fields.
 
+\begin{sloppypar}
+The table groups traits by stage; the draw order is different and is part
+of the format, since changing it changes every plant. Traits are drawn in this
+order: the layout traits from \texttt{layers} to \texttt{phi\_top\_gap}
+(without the bud outline and core size), then \texttt{growth\_rate},
+\texttt{quiet\_growth}, \texttt{edge\_boost}, \texttt{activity\_base},
+\texttt{activity\_neighbor}, \texttt{pressure\_inhibition},
+\texttt{layer\_freedom}, \texttt{petal\_stiffness},
+\texttt{sepal\_stiffness}, \texttt{sepal\_growth}, the latent means from
+\texttt{size\_potential} to \texttt{latent\_noise}, \texttt{growth\_stages},
+and last \texttt{growth\_correlation}, \texttt{growth\_persistence},
+\texttt{growth\_anisotropy}, \texttt{zigzag\_bending}, \texttt{bud\_egg},
+\texttt{bud\_point} and \texttt{core\_size}. New traits are appended at the
+end so that adding them leaves every earlier trait of every seed unchanged.
+\end{sloppypar}
+
 The integer traits (layers $L$ and growth stages $G$) are drawn as
 $\lfloor\Unif[n_0, n_1+1]\rfloor$, capped at $n_1$ and at least 1, so every
 integer in the range is equally likely.
@@ -87,7 +103,7 @@ Trait & Symbol & Peony range & Meaning \\
 \texttt{core\_size} & $s_c$ & 0.85--1.15 & core (stamen and carpel bulb) radius, in nominal core radii \\
 \texttt{max\_thickness} & $\tmax$ & 0.035--0.06 & hard thickness cap, in core radii \\
 \texttt{edge\_thickness} & $e$ & 0.3--0.5 & edge thickness as a fraction of $\tmax$ \\
-\texttt{crumple\_room} & $c$ & 0.3--0.7 & initial room per layer beyond its thickness, in multiples of $\tmax$ \\
+\texttt{crumple\_room} & $\varrho$ & 0.3--0.7 & initial room per layer beyond its thickness, in multiples of $\tmax$ \\
 \texttt{inhibit\_sigma} & $\sigma$ & 0.45--0.75 & reach of a primordium's inhibition (arc length) \\
 \texttt{inhibit\_threshold} & $\tau$ & 0.35--0.6 & initiation allowed below this inhibition \\
 \texttt{init\_prob} & $p_{\mathrm{init}}$ & 0.2--0.45 & chance an uninhibited cell initiates \\
@@ -137,4 +153,9 @@ jittered layer count and both \texttt{growth\_rate} and \texttt{size\_potential}
 are multiplied by $\nu$. The species also fixes the relative weights of petal
 types (flat 0.3, cupped 0.6, rolled 0.1 for peony) and the chance a petal
 twists clockwise (0.5), which are drawn per petal as channels.
+
+The species also holds the shape of the opening, which is not drawn: the
+splay angle runs from 0.35~rad on the innermost layer to 1.65~rad on the
+outermost, the curl the petals keep from 0.8 to 0.15, with profile exponent
+3.0 (\cref{sec:flowering}).
 

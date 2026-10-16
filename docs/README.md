@@ -26,6 +26,7 @@ what gets published as the readable web version.
 | `sections/determinism.tex` | Same seed, same flower on every platform |
 | `sections/future.tex` | Deferred rules and future design goals |
 | `macros.tex` | Shared notation and the sync date and commit |
+| `figures/ca-*.tex` | Worked automaton example, generated (see below) |
 
 ## Keeping it in sync
 
@@ -34,3 +35,16 @@ describes. `check-sync.sh [base]` lists sections whose sources changed since
 `base` while the section did not, and CI prints the same list as warnings on
 pull requests. When a stage changes, update its section and its status, then
 bump `\docsynced` and `\docsyncedcommit` in `macros.tex`.
+
+## Generated figures
+
+The worked automaton example (seed 11, flower 0) is recorded from the model.
+`tools/ca-trace` re-runs `core/src/ca.rs` step by step with the same random
+stream and fails if its grids differ from the model's; `tools/ca_figures.py`
+turns that record into `figures/ca-*.tex`:
+
+    cd tools/ca-trace && cargo run --release -- 11 0 > trace.json
+    python3 ../ca_figures.py trace.json ../../figures
+
+Rerun both when `ca.rs`, the shells or the peony traits change, and update the
+numbers in the example's tables from the same record.
