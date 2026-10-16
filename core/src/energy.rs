@@ -50,6 +50,19 @@ pub struct Spring {
     pub k: f64,
 }
 
+/// Three consecutive nodes of a grid line, resisting the change of their
+/// second difference |a - 2b + c| from its rest value. Unlike a skip-one
+/// spring, this also resists an alternating zigzag of single nodes.
+#[derive(Clone, Copy, Debug)]
+pub struct Bend {
+    pub a: usize,
+    pub b: usize,
+    pub c: usize,
+    pub rest: f64,
+    pub rest0: f64,
+    pub k: f64,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Params {
     pub k_band: f64,
@@ -95,6 +108,7 @@ pub struct System {
     pub layer: Vec<usize>,
     pub petal: Vec<usize>,
     pub springs: Vec<Spring>,
+    pub bends: Vec<Bend>,
     /// Triangles of every petal's control mesh, used for contact.
     pub tris: Vec<[usize; 3]>,
     pub shells: Shells,
@@ -282,6 +296,21 @@ impl System {
             let c = s.k * e / l;
             add_scaled(&mut grad[s.a], c, d);
             add_scaled(&mut grad[s.b], -c, d);
+        }
+
+        for b in &self.bends {
+            let d = [
+                x[b.a][0] - 2.0 * x[b.b][0] + x[b.c][0],
+                x[b.a][1] - 2.0 * x[b.b][1] + x[b.c][1],
+                x[b.a][2] - 2.0 * x[b.b][2] + x[b.c][2],
+            ];
+            let l = norm(d).max(1e-12);
+            let e = l - b.rest;
+            t.springs += 0.5 * b.k * e * e;
+            let c = b.k * e / l;
+            add_scaled(&mut grad[b.a], c, d);
+            add_scaled(&mut grad[b.b], -2.0 * c, d);
+            add_scaled(&mut grad[b.c], c, d);
         }
 
         for (i, &xi) in x.iter().enumerate() {
