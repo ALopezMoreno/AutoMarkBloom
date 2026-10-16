@@ -2,7 +2,7 @@ use automark_core::pack::build_system;
 use automark_core::{grow_bud, PackSettings, PlantSeed, Species};
 use std::time::Instant;
 fn main() {
-    let bud = grow_bud(PlantSeed(11), &Species::peony(), &PackSettings::quick());
+    let bud = grow_bud(PlantSeed(11), 0, &Species::peony(), &PackSettings::quick());
     let (sys, x, _) = build_system(&bud.sheets, &bud.shells, &bud.traits);
     let reach = bud.traits.max_thickness * 3.5;
     let t = Instant::now();

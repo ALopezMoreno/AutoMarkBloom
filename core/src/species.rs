@@ -60,6 +60,30 @@ pub struct Species {
     pub sepal_stiffness: [f64; 2],
     /// Sepal rest-size growth over the whole bud stage, as a fraction.
     pub sepal_growth: [f64; 2],
+
+    // Petal latents handed to the opening stage (plant-level means).
+    /// Overall size potential of the plant's petals.
+    pub size_potential: [f64; 2],
+    /// Cupping target of the innermost and outermost layers (0 flat, 1 deep cup).
+    pub cup_inner: [f64; 2],
+    pub cup_outer: [f64; 2],
+    /// Base fold (reflex) target of the innermost and outermost layers.
+    pub fold_inner: [f64; 2],
+    pub fold_outer: [f64; 2],
+    /// Spread of opening onset from outer to inner layers (0 all at once).
+    pub onset_spread: [f64; 2],
+    /// Relative per-petal noise on latents around the plant targets.
+    pub latent_noise: [f64; 2],
+
+    // Rules applied per flower (fixed for the species, not drawn per plant).
+    /// Range of a flower's vigour (main vs. side bud, conditions).
+    pub vigour: [f64; 2],
+    /// Chance a flower has one layer fewer or one more than the plant mean.
+    pub layer_jitter: f64,
+    /// Relative weights of petal types: flat, cupped, rolled.
+    pub petal_type_weights: [f64; 3],
+    /// Chance a petal twists clockwise (else anticlockwise).
+    pub twist_clockwise: f64,
 }
 
 impl Species {
@@ -91,6 +115,17 @@ impl Species {
             layer_freedom: [1.5, 3.0],
             sepal_stiffness: [5.0, 25.0],
             sepal_growth: [0.04, 0.12],
+            size_potential: [0.85, 1.15],
+            cup_inner: [0.6, 0.9],
+            cup_outer: [0.1, 0.35],
+            fold_inner: [0.0, 0.15],
+            fold_outer: [0.2, 0.5],
+            onset_spread: [0.4, 0.8],
+            latent_noise: [0.05, 0.15],
+            vigour: [0.85, 1.1],
+            layer_jitter: 0.4,
+            petal_type_weights: [0.3, 0.6, 0.1],
+            twist_clockwise: 0.5,
         }
     }
 

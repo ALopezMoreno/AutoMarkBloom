@@ -9,6 +9,7 @@
 //!     resists growing past its rest size, so petal pressure swells it)
 //!   + contact (a node of one petal stays (t_i + t_j)/2 from the control
 //!     mesh of every other petal: point-triangle distance, not node-node)
+//!
 //! Every term is a squared hinge or spring, so E is C1 and its gradient is
 //! exact. `tests/` checks it against finite differences.
 //!

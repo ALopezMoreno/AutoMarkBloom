@@ -13,6 +13,8 @@ pub const STREAM_TRAITS: u64 = 0;
 pub const STREAM_CA: u64 = 1;
 pub const STREAM_PACK: u64 = 2;
 pub const STREAM_GROWTH: u64 = 3;
+pub const STREAM_FLOWER: u64 = 4;
+pub const STREAM_CHANNELS: u64 = 5;
 const STREAM_FLOWER_BASE: u64 = 1_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,9 +25,16 @@ impl PlantSeed {
         Pcg32::new(derive(self.0, stream), stream)
     }
 
-    /// Per-flower stream, for the flowering stage.
-    pub fn flower_rng(&self, index: u64) -> Pcg32 {
-        self.rng(STREAM_FLOWER_BASE + index)
+    /// Seed of one flower on this plant. Traits stay per plant; everything
+    /// a flower grows (its bud automaton, growth, packing, latents) draws
+    /// from sub-streams of this.
+    pub fn flower_seed(&self, index: u64) -> u64 {
+        derive(self.0, STREAM_FLOWER_BASE.wrapping_add(index))
+    }
+
+    /// A named sub-stream of one flower (`STREAM_*` constants).
+    pub fn flower_rng(&self, index: u64, stream: u64) -> Pcg32 {
+        Pcg32::new(derive(self.flower_seed(index), stream), stream)
     }
 
     pub fn traits(&self, species: &Species) -> PlantTraits {
@@ -61,6 +70,43 @@ pub struct PlantTraits {
     pub layer_freedom: f64,
     pub sepal_stiffness: f64,
     pub sepal_growth: f64,
+    pub size_potential: f64,
+    pub cup_inner: f64,
+    pub cup_outer: f64,
+    pub fold_inner: f64,
+    pub fold_outer: f64,
+    pub onset_spread: f64,
+    pub latent_noise: f64,
+}
+
+/// What one flower adds on top of its plant's traits.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct FlowerTraits {
+    pub index: u64,
+    /// Size and growth factor of this flower.
+    pub vigour: f64,
+    /// Layer count after this flower's jitter.
+    pub layers: usize,
+}
+
+impl FlowerTraits {
+    pub fn draw(index: u64, s: &Species, plant: &PlantTraits, r: &mut Pcg32) -> Self {
+        let vigour = r.range(s.vigour[0], s.vigour[1]);
+        let mut layers = plant.layers as i64;
+        if r.f64() < s.layer_jitter {
+            layers += if r.f64() < 0.5 { -1 } else { 1 };
+        }
+        FlowerTraits { index, vigour, layers: layers.max(1) as usize }
+    }
+
+    /// The plant's traits as this flower grows them.
+    pub fn apply(&self, plant: &PlantTraits) -> PlantTraits {
+        let mut t = plant.clone();
+        t.layers = self.layers;
+        t.growth_rate *= self.vigour;
+        t.size_potential *= self.vigour;
+        t
+    }
 }
 
 fn int_in(r: &mut Pcg32, x: [u32; 2]) -> usize {
@@ -95,6 +141,13 @@ impl PlantTraits {
         let petal_stiffness = f(s.petal_stiffness);
         let sepal_stiffness = f(s.sepal_stiffness);
         let sepal_growth = f(s.sepal_growth);
+        let size_potential = f(s.size_potential);
+        let cup_inner = f(s.cup_inner);
+        let cup_outer = f(s.cup_outer);
+        let fold_inner = f(s.fold_inner);
+        let fold_outer = f(s.fold_outer);
+        let onset_spread = f(s.onset_spread);
+        let latent_noise = f(s.latent_noise);
         let growth_stages = int_in(r, s.growth_stages);
         PlantTraits {
             layers,
@@ -122,6 +175,13 @@ impl PlantTraits {
             layer_freedom,
             sepal_stiffness,
             sepal_growth,
+            size_potential,
+            cup_inner,
+            cup_outer,
+            fold_inner,
+            fold_outer,
+            onset_spread,
+            latent_noise,
         }
     }
 }

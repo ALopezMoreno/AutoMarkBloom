@@ -11,9 +11,10 @@ use sha2::{Digest, Sha256};
 /// bit-pattern seeds catch mistakes in seed derivation.
 pub const SEEDS: [u64; 8] = [0, 1, 2, 7, 42, 1234, 0xDEAD_BEEF, u64::MAX];
 
-/// Canonical output for `seed`: peony species, default settings, as flower JSON.
+/// Canonical output for `seed`: flower 0, peony species, default settings,
+/// as flower JSON.
 pub fn bud_bytes(seed: u64) -> Vec<u8> {
-    automark_core::grow_bud_json(seed).into_bytes()
+    automark_core::grow_bud_json(seed, 0).into_bytes()
 }
 
 pub fn digest(seed: u64) -> String {

@@ -2,8 +2,11 @@
 //! viewer/FORMAT.md). This is the core's one canonical output: the same seed,
 //! species and settings always give byte-identical JSON on every platform.
 
+use crate::channels::{ChannelDecl, Scope};
 use crate::Bud;
 use serde::Serialize;
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 /// Samples per control-grid span along the petal and across it.
 pub const SAMPLES_ALONG: usize = 2;
@@ -26,21 +29,25 @@ struct PetalInfo {
 struct PetalFrame {
     mid: Vec<f64>,
     thick: Vec<f64>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    channels: BTreeMap<String, Value>,
 }
 
 #[derive(Serialize)]
 struct Frame {
     t: f64,
     stage: &'static str,
-    /// Sepal envelope scaled radius at this frame.
-    envelope: f64,
+    /// Flower-scope channel values; an absent channel keeps its last value.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    channels: BTreeMap<String, Value>,
     petals: Vec<PetalFrame>,
 }
 
 #[derive(Serialize)]
 struct Meta<'a> {
     species: &'a crate::species::Species,
-    traits: &'a crate::traits::PlantTraits,
+    plant: &'a crate::traits::PlantTraits,
+    flower: &'a crate::traits::FlowerTraits,
     pack: &'a crate::pack::PackReport,
 }
 
@@ -49,11 +56,12 @@ struct FlowerDoc<'a> {
     format: &'static str,
     version: u32,
     seed: String,
-    flower_index: Option<u64>,
+    flower_index: u64,
     units: &'static str,
     up: &'static str,
     shells: &'a crate::shells::Shells,
     grid: Grid,
+    channels: &'a [ChannelDecl],
     petals: Vec<PetalInfo>,
     frames: Vec<Frame>,
     meta: Meta<'a>,
@@ -88,7 +96,16 @@ fn petal_frame(sheet: &crate::sheet::Sheet, shells: &crate::shells::Shells, nu: 
             thick.push(q(th[a * nv + c]));
         }
     }
-    PetalFrame { mid, thick }
+    PetalFrame { mid, thick, channels: BTreeMap::new() }
+}
+
+/// One channel value: a bare number for dims 1, else an array.
+fn value(v: &[f64]) -> Value {
+    if v.len() == 1 {
+        Value::from(q(v[0]))
+    } else {
+        Value::from(v.iter().map(|&x| q(x)).collect::<Vec<f64>>())
+    }
 }
 
 /// The flower JSON. With recorded frames, the bud's development is included
@@ -116,24 +133,49 @@ pub fn flower_json(bud: &Bud) -> String {
                 petal_frame(&s, &bud.shells, nu, nv)
             })
             .collect();
-        frames.push(Frame { t: q(f.stage as f64 / last - 1.0), stage: "bud", envelope: q(f.envelope), petals });
+        let mut channels = BTreeMap::new();
+        channels.insert("sepal_radius".to_string(), Value::from(q(f.envelope)));
+        frames.push(Frame { t: q(f.stage as f64 / last - 1.0), stage: "bud", channels, petals });
     }
     if frames.is_empty() {
         let petals = bud.sheets.iter().map(|s| petal_frame(s, &bud.shells, nu, nv)).collect();
-        frames.push(Frame { t: 0.0, stage: "bud", envelope: q(bud.report.envelope_end), petals });
+        frames.push(Frame { t: 0.0, stage: "bud", channels: BTreeMap::new(), petals });
+    }
+    // Every channel's value goes in the first frame. Frames that recorded
+    // their own sepal radius keep it.
+    let first = &mut frames[0];
+    for d in &bud.channels.decls {
+        let vals = bud.channels.get(&d.name).unwrap_or(&[]);
+        match d.scope {
+            Scope::Flower => {
+                first.channels.entry(d.name.clone()).or_insert_with(|| value(vals));
+            }
+            Scope::Petal => {
+                for (i, p) in first.petals.iter_mut().enumerate() {
+                    p.channels.insert(d.name.clone(), value(&vals[i * d.dims..(i + 1) * d.dims]));
+                }
+            }
+            Scope::Point => {
+                let per = vals.len() / first.petals.len().max(1);
+                for (i, p) in first.petals.iter_mut().enumerate() {
+                    p.channels.insert(d.name.clone(), Value::from(vals[i * per..(i + 1) * per].iter().map(|&x| q(x)).collect::<Vec<f64>>()));
+                }
+            }
+        }
     }
     let doc = FlowerDoc {
         format: "automark-flower",
         version: 1,
         seed: bud.seed.0.to_string(),
-        flower_index: None,
+        flower_index: bud.flower.index,
         units: "core_radius",
         up: "+z",
         shells: &bud.shells,
         grid: Grid { nu, nv },
+        channels: &bud.channels.decls,
         petals: infos,
         frames,
-        meta: Meta { species: &bud.species, traits: &bud.traits, pack: &bud.report },
+        meta: Meta { species: &bud.species, plant: &bud.plant, flower: &bud.flower, pack: &bud.report },
     };
     serde_json::to_string(&doc).expect("flower JSON serializes")
 }

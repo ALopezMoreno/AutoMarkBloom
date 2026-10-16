@@ -150,6 +150,12 @@ fn refine_scalar(v: &[f64], s: usize) -> Vec<f64> {
 }
 
 impl Sheet {
+    /// Control grid size: (across, along) = (NU, NV). Use this rather than
+    /// hard-coding the constants.
+    pub fn grid(&self) -> (usize, usize) {
+        (NU, NV)
+    }
+
     pub fn along(sa: usize) -> usize {
         (NV - 1) * sa + 1
     }

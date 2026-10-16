@@ -9,7 +9,8 @@
 //! 4. the energy is relaxed with FIRE (gradient descent with adaptive
 //!    inertia) over all node positions plus the envelope radius, so petal
 //!    pressure swells the bud.
-//! A small plant-seeded nudge along the shell normal breaks symmetry at the
+//!
+//! A small flower-seeded nudge along the shell normal breaks symmetry at the
 //! start. The base row of every petal is pinned to the receptacle.
 
 use crate::energy::{Candidate, Envelope, Params, Spring, System, Terms};
@@ -94,8 +95,8 @@ pub fn build_system(sheets: &[Sheet], shells: &Shells, t: &PlantTraits) -> (Syst
         }
         x.extend_from_slice(&s.pos);
         thick.extend_from_slice(&s.thick);
-        layer.extend(std::iter::repeat(s.layer).take(NU * NV));
-        petal.extend(std::iter::repeat(si).take(NU * NV));
+        layer.extend(std::iter::repeat_n(s.layer, NU * NV));
+        petal.extend(std::iter::repeat_n(si, NU * NV));
         pinned.extend((0..NU * NV).map(|i| i < NU));
         let mut add = |a: usize, b: usize, k: f64| {
             let d = [s.pos[a][0] - s.pos[b][0], s.pos[a][1] - s.pos[b][1], s.pos[a][2] - s.pos[b][2]];
@@ -245,7 +246,7 @@ pub fn develop(
     settings: &PackSettings,
     rng_pack: &mut Pcg32,
     rng_growth: &mut Pcg32,
-) -> (PackReport, Vec<StageFrame>) {
+) -> (PackReport, Vec<StageFrame>, Vec<Growth>) {
     let (mut sys, mut x, pinned) = build_system(sheets, shells, t);
     let n = x.len();
 
@@ -323,5 +324,5 @@ pub fn develop(
         mean_growth: all.iter().sum::<f64>() / all.len().max(1) as f64,
         max_growth: all.iter().cloned().fold(0.0, f64::max),
     };
-    (report, frames)
+    (report, frames, growth)
 }
