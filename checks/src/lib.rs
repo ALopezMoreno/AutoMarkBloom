@@ -21,7 +21,38 @@ pub fn digest(seed: u64) -> String {
     hash.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Digests of `seeds`, in order. Each seed is grown on its own thread where
+/// threads exist; a bud is single-threaded, so this cannot change its bits.
+pub fn digests(seeds: &[u64]) -> Vec<String> {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = seeds
+                .iter()
+                .map(|&s| scope.spawn(move || digest(s)))
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("bud thread panicked"))
+                .collect()
+        })
+    }
+    #[cfg(target_family = "wasm")]
+    {
+        seeds.iter().map(|&s| digest(s)).collect()
+    }
+}
+
+/// `<seed> <sha256>` lines for `seeds`.
+pub fn format_table(seeds: &[u64], digests: &[String]) -> String {
+    seeds
+        .iter()
+        .zip(digests)
+        .map(|(s, d)| format!("{s} {d}\n"))
+        .collect()
+}
+
 /// One `<seed> <sha256>` line per reference seed.
 pub fn digest_table() -> String {
-    SEEDS.iter().map(|&s| format!("{s} {}\n", digest(s))).collect()
+    format_table(&SEEDS, &digests(&SEEDS))
 }

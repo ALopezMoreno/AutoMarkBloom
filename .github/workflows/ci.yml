@@ -25,13 +25,6 @@ jobs:
         run: cargo test --workspace --release
       - name: Clippy
         run: cargo clippy --release --workspace --all-targets
-      - name: Seed digests
-        shell: bash
-        run: cargo run -q --release -p automark-checks --bin seed-digests > digests-${{ matrix.os }}.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: digests-${{ matrix.os }}
-          path: digests-${{ matrix.os }}.txt
 
   wasm:
     name: WebAssembly
@@ -47,39 +40,23 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
-      - name: Seed digests under WebAssembly
+      # Native builds are compared with the golden digests by the tests above.
+      # WASI has no threads, so the seeds are split across one process per core.
+      - name: Same flower as native, under WebAssembly
         run: |
           cargo build --release -p automark-checks --bin seed-digests --target wasm32-wasip1
-          node --no-warnings scripts/run-wasi.mjs target/wasm32-wasip1/release/seed-digests.wasm > digests-wasm.txt
+          n=$(nproc)
+          for k in $(seq 0 $((n - 1))); do
+            node --no-warnings scripts/run-wasi.mjs target/wasm32-wasip1/release/seed-digests.wasm "$k/$n" > "shard-$k.txt" &
+          done
+          wait
+          cat shard-*.txt | sort > digests-wasm.txt
+          if ! diff -u <(sort checks/golden/digests.txt) digests-wasm.txt; then
+            echo "::error::WebAssembly digests differ from checks/golden/digests.txt"
+            exit 1
+          fi
       - name: Browser package
         run: wasm-pack build wasm --release --target web
-      - uses: actions/upload-artifact@v4
-        with:
-          name: digests-wasm
-          path: digests-wasm.txt
-
-  same-flower-everywhere:
-    name: Same flower on every platform
-    needs: [native, wasm]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: digests-*
-          merge-multiple: true
-      - name: Compare with golden digests
-        run: |
-          status=0
-          for f in digests-*.txt; do
-            if diff -u checks/golden/digests.txt "$f"; then
-              echo "$f matches"
-            else
-              echo "::error::$f differs from checks/golden/digests.txt"
-              status=1
-            fi
-          done
-          exit $status
 
   viewer:
     name: Viewer
