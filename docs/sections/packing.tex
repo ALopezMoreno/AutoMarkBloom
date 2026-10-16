@@ -194,7 +194,20 @@ corresponds to a contact force of $k_{\mathrm{contact}}\,\tmax/4$.
   $R_{\mathrm{rest}} = R_{\mathrm{env}}\bigl(1 + g_s\,g/G\bigr)$; relax.
 \item \textbf{Settle.} After the last stage, relax for longer.
 \end{enumerate}
-Defaults: 250 relaxation iterations per stage and 600 to settle.
+Defaults: 60 relaxation iterations per stage and 150 to settle.
+
+\paragraph{Coarse to fine.} The first $\lfloor 0.7\,G\rfloor$ stages only set
+the bud's broad shape, so they are relaxed on every other control point (a
+$6\times10$ grid per petal instead of $11\times19$), about four times cheaper per
+iteration. Springs and bends join neighbours on that grid, with rest lengths
+from the same laid-out sheet and growth read at their end nodes; skip-spring
+bending stiffness is divided by 4, since a spring twice as long resists the
+same curvature four times as hard. The growth automaton still runs on the full
+grid: each node's pressure is interpolated bilinearly from the coarse grid.
+Then positions are interpolated back onto the full grid (the pinned base row
+keeps its own), the bud is relaxed once more, and the remaining stages, where
+the petals crumple, run at full resolution. A fraction of 0 restores full
+resolution throughout (\texttt{PackSettings::coarse\_fraction}).
 
 \paragraph{Relaxation by FIRE.} The energy is minimised by FIRE (Fast Inertial
 Relaxation Engine), gradient descent with inertia that is reset whenever it

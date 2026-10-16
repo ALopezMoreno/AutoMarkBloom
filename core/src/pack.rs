@@ -30,11 +30,16 @@ pub struct PackSettings {
     pub dt_max: f64,
     /// Keep every stage's geometry (for the swelling animation).
     pub record_frames: bool,
+    /// Fraction of the growth stages relaxed on a half-resolution grid
+    /// (every other control point) before refining to the full grid. The
+    /// early stages only set the bud's broad shape; the late ones, which
+    /// crumple the petals, always run on the full grid. 0 disables it.
+    pub coarse_fraction: f64,
 }
 
 impl Default for PackSettings {
     fn default() -> Self {
-        PackSettings { relax_iterations: 60, settle_iterations: 150, dt_max: 0.3, record_frames: false }
+        PackSettings { relax_iterations: 60, settle_iterations: 150, dt_max: 0.3, record_frames: false, coarse_fraction: 0.7 }
     }
 }
 
@@ -85,66 +90,92 @@ pub struct StageFrame {
 }
 
 pub fn build_system(sheets: &[Sheet], shells: &Shells, t: &PlantTraits) -> (System, Vec<[f64; 3]>, Vec<bool>) {
+    let g = build_grid(sheets, shells, t, 1);
+    (g.sys, g.x, g.pinned)
+}
+
+/// A system on every `step`-th node of each sheet's grid.
+pub struct GridSystem {
+    pub sys: System,
+    pub x: Vec<[f64; 3]>,
+    pub pinned: Vec<bool>,
+    /// Grid size per sheet.
+    pub nu: usize,
+    pub nv: usize,
+    /// Fine (global) node index of each node.
+    pub fine: Vec<usize>,
+}
+
+pub fn build_grid(sheets: &[Sheet], shells: &Shells, t: &PlantTraits, step: usize) -> GridSystem {
+    let (nu, nv) = ((NU - 1) / step + 1, (NV - 1) / step + 1);
+    let id = |u: usize, v: usize| v * nu + u;
+    let fi = |u: usize, v: usize| idx(u * step, v * step);
+    // Bending rigidity of a skip spring grows with the square of its length.
+    let bend_scale = 1.0 / (step * step) as f64;
     let mut x = Vec::new();
     let mut thick = Vec::new();
     let mut layer = Vec::new();
     let mut petal = Vec::new();
     let mut pinned = Vec::new();
+    let mut fine = Vec::new();
     let mut springs = Vec::new();
     let mut bends = Vec::new();
     let mut tris = Vec::new();
     for (si, s) in sheets.iter().enumerate() {
         let o = x.len();
-        for v in 0..NV - 1 {
-            for u in 0..NU - 1 {
-                let (a, b, c, d) = (o + idx(u, v), o + idx(u + 1, v), o + idx(u, v + 1), o + idx(u + 1, v + 1));
+        for v in 0..nv - 1 {
+            for u in 0..nu - 1 {
+                let (a, b, c, d) = (o + id(u, v), o + id(u + 1, v), o + id(u, v + 1), o + id(u + 1, v + 1));
                 tris.push([a, b, d]);
                 tris.push([a, d, c]);
             }
         }
-        x.extend_from_slice(&s.pos);
-        thick.extend_from_slice(&s.thick);
-        layer.extend(std::iter::repeat_n(s.layer, NU * NV));
-        petal.extend(std::iter::repeat_n(si, NU * NV));
-        pinned.extend((0..NU * NV).map(|i| i < NU));
+        let pos: Vec<[f64; 3]> = (0..nu * nv).map(|i| s.pos[fi(i % nu, i / nu)]).collect();
+        let th: Vec<f64> = (0..nu * nv).map(|i| s.thick[fi(i % nu, i / nu)]).collect();
+        x.extend_from_slice(&pos);
+        thick.extend_from_slice(&th);
+        fine.extend((0..nu * nv).map(|i| si * NU * NV + fi(i % nu, i / nu)));
+        layer.extend(std::iter::repeat_n(s.layer, nu * nv));
+        petal.extend(std::iter::repeat_n(si, nu * nv));
+        pinned.extend((0..nu * nv).map(|i| i < nu));
         let mut add = |a: usize, b: usize, k: f64| {
-            let d = [s.pos[a][0] - s.pos[b][0], s.pos[a][1] - s.pos[b][1], s.pos[a][2] - s.pos[b][2]];
+            let d = [pos[a][0] - pos[b][0], pos[a][1] - pos[b][1], pos[a][2] - pos[b][2]];
             let l = math::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
             springs.push(Spring { a: o + a, b: o + b, rest: l, rest0: l, k });
         };
-        for v in 0..NV {
-            for u in 0..NU {
-                let tr = s.thick[idx(u, v)] / t.max_thickness;
-                let k_bend = t.petal_stiffness * tr * tr * tr;
-                if u + 1 < NU {
-                    add(idx(u, v), idx(u + 1, v), 40.0);
+        for v in 0..nv {
+            for u in 0..nu {
+                let tr = th[id(u, v)] / t.max_thickness;
+                let k_bend = t.petal_stiffness * tr * tr * tr * bend_scale;
+                if u + 1 < nu {
+                    add(id(u, v), id(u + 1, v), 40.0);
                 }
-                if v + 1 < NV {
-                    add(idx(u, v), idx(u, v + 1), 40.0);
+                if v + 1 < nv {
+                    add(id(u, v), id(u, v + 1), 40.0);
                 }
-                if u + 1 < NU && v + 1 < NV {
-                    add(idx(u, v), idx(u + 1, v + 1), 10.0);
-                    add(idx(u + 1, v), idx(u, v + 1), 10.0);
+                if u + 1 < nu && v + 1 < nv {
+                    add(id(u, v), id(u + 1, v + 1), 10.0);
+                    add(id(u + 1, v), id(u, v + 1), 10.0);
                 }
-                if u + 2 < NU {
-                    add(idx(u, v), idx(u + 2, v), k_bend);
+                if u + 2 < nu {
+                    add(id(u, v), id(u + 2, v), k_bend);
                 }
-                if v + 2 < NV {
-                    add(idx(u, v), idx(u, v + 2), k_bend);
+                if v + 2 < nv {
+                    add(id(u, v), id(u, v + 2), k_bend);
                 }
                 if t.zigzag_bending > 0.0 {
                     // Rest value is the laid-out second difference, so the
                     // shell's own curvature costs nothing.
                     let mut bend = |a: usize, b: usize, c: usize| {
-                        let d = [0, 1, 2].map(|k| s.pos[a][k] - 2.0 * s.pos[b][k] + s.pos[c][k]);
+                        let d = [0, 1, 2].map(|k| pos[a][k] - 2.0 * pos[b][k] + pos[c][k]);
                         let r = math::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
                         bends.push(Bend { a: o + a, b: o + b, c: o + c, rest: r, rest0: r, k: k_bend * t.zigzag_bending });
                     };
-                    if u + 2 < NU {
-                        bend(idx(u, v), idx(u + 1, v), idx(u + 2, v));
+                    if u + 2 < nu {
+                        bend(id(u, v), id(u + 1, v), id(u + 2, v));
                     }
-                    if v + 2 < NV {
-                        bend(idx(u, v), idx(u, v + 1), idx(u, v + 2));
+                    if v + 2 < nv {
+                        bend(id(u, v), id(u, v + 1), id(u, v + 2));
                     }
                 }
             }
@@ -152,7 +183,32 @@ pub fn build_system(sheets: &[Sheet], shells: &Shells, t: &PlantTraits) -> (Syst
     }
     let params = Params { k_sepal: t.sepal_stiffness, layer_freedom: t.layer_freedom, ..Params::default() };
     let sys = System { thick, layer, petal, springs, bends, tris, shells: shells.clone(), params };
-    (sys, x, pinned)
+    GridSystem { sys, x, pinned, nu, nv, fine }
+}
+
+/// Fine positions from a coarse grid (`step` 2): coarse nodes are copied,
+/// the rest are averaged from their coarse neighbours (bilinear).
+fn prolong(coarse: &[[f64; 3]], nu: usize, sheets: usize) -> Vec<[f64; 3]> {
+    let nvc = coarse.len() / sheets / nu;
+    let mut out = vec![[0.0; 3]; sheets * NU * NV];
+    for s in 0..sheets {
+        let c = |u: usize, v: usize| coarse[s * nu * nvc + v * nu + u];
+        for v in 0..NV {
+            for u in 0..NU {
+                let (u0, v0) = (u / 2, v / 2);
+                let (u1, v1) = (u.div_ceil(2), v.div_ceil(2));
+                let p = [0, 1, 2].map(|k| 0.25 * (c(u0, v0)[k] + c(u1, v0)[k] + c(u0, v1)[k] + c(u1, v1)[k]));
+                out[s * NU * NV + idx(u, v)] = p;
+            }
+        }
+    }
+    out
+}
+
+/// Fine values from a coarse grid, bilinear as in `prolong`.
+fn prolong_scalar(coarse: &[f64], nu: usize, sheets: usize) -> Vec<f64> {
+    let p: Vec<[f64; 3]> = coarse.iter().map(|&v| [v, 0.0, 0.0]).collect();
+    prolong(&p, nu, sheets).iter().map(|q| q[0]).collect()
 }
 
 /// FIRE relaxation over node positions and the envelope radius, with a
@@ -314,6 +370,40 @@ impl Relaxer {
     }
 }
 
+/// One growth stage on every petal; returns (scale, along, across) per fine node.
+fn grow(growth: &mut [Growth], pressure: &[f64], p_ref: f64, t: &PlantTraits, rng: &mut Pcg32) -> [Vec<f64>; 3] {
+    for (si, g) in growth.iter_mut().enumerate() {
+        let p: Vec<f64> = pressure[si * NU * NV..(si + 1) * NU * NV].iter().map(|f| f / p_ref).collect();
+        g.step(&p, t, rng);
+    }
+    factors(growth)
+}
+
+fn factors(growth: &[Growth]) -> [Vec<f64>; 3] {
+    let cat = |f: fn(&Growth) -> &Vec<f64>| growth.iter().flat_map(|g| f(g).iter().cloned()).collect::<Vec<f64>>();
+    [cat(|g| &g.scale), cat(|g| &g.along), cat(|g| &g.across)]
+}
+
+/// Rest lengths from accumulated growth. `fine` maps the system's nodes to
+/// fine nodes; `nu` is the system's grid width.
+fn set_rest(sys: &mut System, nu: usize, f: &[Vec<f64>; 3], fine: &[usize]) {
+    let [scale, along, across] = f;
+    for s in sys.springs.iter_mut() {
+        // Springs within one sheet: index gap 1 or 2 runs across the
+        // petal, nu or 2 nu runs along it, anything else is a diagonal.
+        let g = match s.b - s.a {
+            1 | 2 => across,
+            d if d == nu || d == 2 * nu => along,
+            _ => scale,
+        };
+        s.rest = s.rest0 * 0.5 * (g[fine[s.a]] + g[fine[s.b]]);
+    }
+    for b in sys.bends.iter_mut() {
+        let g = if b.b - b.a == 1 { across } else { along };
+        b.rest = b.rest0 * g[fine[b.b]];
+    }
+}
+
 fn snapshot(x: &[[f64; 3]], sheets: usize) -> Vec<Vec<[f64; 3]>> {
     (0..sheets).map(|s| x[s * NU * NV..(s + 1) * NU * NV].to_vec()).collect()
 }
@@ -343,43 +433,61 @@ pub fn develop(
     }
 
     let mut env = Envelope { r: shells.envelope, rest: shells.envelope };
+    let mut growth = vec![Growth::default(); sheets.len()];
+    let p_ref = sys.params.k_contact * 0.25 * t.max_thickness;
+    let mut frames = Vec::new();
+    let coarse_stages = (math::floor(settings.coarse_fraction.clamp(0.0, 1.0) * t.growth_stages as f64) as usize).min(t.growth_stages);
+    let mut stage0 = 1;
+    let mut start = None;
+    if coarse_stages > 0 {
+        // Early stages on every other node, then prolong to the full grid.
+        let mut cg = build_grid(sheets, shells, t, 2);
+        let mut xc: Vec<[f64; 3]> = cg.fine.iter().map(|&f| x[f]).collect();
+        let mut rc = Relaxer::new(&cg.sys, &xc, t);
+        let mut sc = vec![[0.0; 3]; xc.len()];
+        start = Some(cg.sys.energy(&xc, env, &rc.cands, &mut sc, &mut 0.0));
+        rc.run(&cg.sys, &mut xc, &mut env, &cg.pinned, settings.relax_iterations, settings.dt_max);
+        if settings.record_frames {
+            frames.push(StageFrame { stage: 0, pos: snapshot(&prolong(&xc, cg.nu, sheets.len()), sheets.len()), envelope: env.r });
+        }
+        for stage in 1..=coarse_stages {
+            rc.refresh(&cg.sys, &xc, true);
+            let pc = cg.sys.pressure(&xc, env, &rc.cands);
+            let pressure = prolong_scalar(&pc, cg.nu, sheets.len());
+            let f = grow(&mut growth, &pressure, p_ref, t, rng_growth);
+            set_rest(&mut cg.sys, cg.nu, &f, &cg.fine);
+            env.rest = shells.envelope * (1.0 + t.sepal_growth * stage as f64 / t.growth_stages as f64);
+            rc.run(&cg.sys, &mut xc, &mut env, &cg.pinned, settings.relax_iterations, settings.dt_max);
+            if settings.record_frames {
+                frames.push(StageFrame { stage, pos: snapshot(&prolong(&xc, cg.nu, sheets.len()), sheets.len()), envelope: env.r });
+            }
+        }
+        let xf = prolong(&xc, cg.nu, sheets.len());
+        for i in 0..n {
+            if !pinned[i] {
+                x[i] = xf[i];
+            }
+        }
+        let f = factors(&growth);
+        let ident: Vec<usize> = (0..n).collect();
+        set_rest(&mut sys, NU, &f, &ident);
+        stage0 = coarse_stages + 1;
+    }
     let mut relax = Relaxer::new(&sys, &x, t);
     let mut scratch = vec![[0.0; 3]; n];
     let mut genv = 0.0;
-    let start = sys.energy(&x, env, &relax.cands, &mut scratch, &mut genv);
+    let start = start.unwrap_or_else(|| sys.energy(&x, env, &relax.cands, &mut scratch, &mut genv));
     relax.run(&sys, &mut x, &mut env, &pinned, settings.relax_iterations, settings.dt_max);
 
-    let mut frames = Vec::new();
-    if settings.record_frames {
+    if settings.record_frames && coarse_stages == 0 {
         frames.push(StageFrame { stage: 0, pos: snapshot(&x, sheets.len()), envelope: env.r });
     }
-    let mut growth = vec![Growth::default(); sheets.len()];
-    let p_ref = sys.params.k_contact * 0.25 * t.max_thickness;
-    for stage in 1..=t.growth_stages {
+    for stage in stage0..=t.growth_stages {
         relax.refresh(&sys, &x, true);
         let pressure = sys.pressure(&x, env, &relax.cands);
-        let (mut scale, mut along, mut across) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
-        for (si, g) in growth.iter_mut().enumerate() {
-            let p: Vec<f64> = pressure[si * NU * NV..(si + 1) * NU * NV].iter().map(|f| f / p_ref).collect();
-            g.step(&p, t, rng_growth);
-            scale.extend_from_slice(&g.scale);
-            along.extend_from_slice(&g.along);
-            across.extend_from_slice(&g.across);
-        }
-        for s in sys.springs.iter_mut() {
-            // Springs within one sheet: index gap 1 or 2 runs across the
-            // petal, NU or 2 NU runs along it, anything else is a diagonal.
-            let f = match s.b - s.a {
-                1 | 2 => &across,
-                d if d == NU || d == 2 * NU => &along,
-                _ => &scale,
-            };
-            s.rest = s.rest0 * 0.5 * (f[s.a] + f[s.b]);
-        }
-        for b in sys.bends.iter_mut() {
-            let f = if b.b - b.a == 1 { &across } else { &along };
-            b.rest = b.rest0 * f[b.b];
-        }
+        let f = grow(&mut growth, &pressure, p_ref, t, rng_growth);
+        let ident: Vec<usize> = (0..n).collect();
+        set_rest(&mut sys, NU, &f, &ident);
         env.rest = shells.envelope * (1.0 + t.sepal_growth * stage as f64 / t.growth_stages as f64);
         relax.run(&sys, &mut x, &mut env, &pinned, settings.relax_iterations, settings.dt_max);
         if settings.record_frames {

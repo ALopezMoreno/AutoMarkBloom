@@ -109,3 +109,18 @@ Seed 11 flower 0, 24 frames, measured natively:
   triangles whose plane is beyond reach, and merges new pairs into the kept ones instead of
   re-sorting. Output is byte-identical (checked on seeds 11 and 2027). Seed 11 from seed to
   open went from 35 s to 29 s.
+
+## Coarse-to-fine bud (changes output)
+
+The first 70% of growth stages (`PackSettings::coarse_fraction`) relax on every other control
+point, a 6×10 grid per petal, then the bud is interpolated back to 11×19 for the late stages,
+where the petals crumple, and for the settle. The growth automaton stays on the full grid.
+Folds land in different places, but the crumpled character is kept (checked on seeds 11 and
+2027). Golden digests re-blessed.
+
+| Bud | before | after |
+|---|---|---|
+| seed 11 | 10.0 s | 5.5 s |
+| seed 2027 | 3.8 s | 2.4 s |
+
+Most of the bud's time is now in the full-resolution stages and settle.
