@@ -86,16 +86,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: has
-        run: echo "viewer=$([ -f viewer/package.json ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+      - name: Install pinned toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
       - uses: actions/setup-node@v4
-        if: steps.has.outputs.viewer == 'yes'
         with:
           node-version: 22
+      # The viewer picks up wasm/pkg when present and grows buds live from it.
+      - name: Browser package
+        run: wasm-pack build wasm --release --target web
       - name: Build viewer
-        if: steps.has.outputs.viewer == 'yes'
         working-directory: viewer
         run: |
           npm ci
-          npm run build --if-present
-          npm test --if-present
+          npm run build
+          test -n "$(find dist -name '*.wasm')" || { echo "::error::viewer build is missing the core's wasm"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viewer-site
+          path: viewer/dist
