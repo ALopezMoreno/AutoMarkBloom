@@ -38,3 +38,26 @@ default and still more relaxed than it was.
 
 Any change to canonical output needs the golden digests re-blessed
 (`BLESS=1 cargo test --release -p automark-checks`).
+
+## Opening (stage 2)
+
+Seed 11 flower 0, 24 frames, measured natively:
+
+- **Per-node masses don't help the opening.** With the bud's preconditioning applied to the
+  opening's FIRE, the opening took 45–60 s instead of 41 s, and final energy didn't improve.
+  The opening isn't stiffness-bound. Each frame warm-starts from the previous one moved by the
+  change in pose, and energy plateaus where the pose tether, bending and contact disagree.
+  Larger steps only caused more contact rebuilds.
+- **Contact rebuilds are about two thirds of the opening's time.** There are about 290
+  rebuilds at about 65 ms each, roughly 800k exact sample-triangle tests per rebuild. Binning
+  triangles into a finer dense grid and adding a bounding-sphere pre-test both gave identical
+  candidates at the same speed. The nearby pairs are genuinely near, so what costs is the
+  number of rebuilds.
+- **Fewer iterations.** Energy has settled well before 120 iterations, so the default is now
+  60 iterations with `dt_max` 0.06:
+
+| Opening relax settings | time | final energy | final max overlap |
+|---|---|---|---|
+| 120 iterations, dt_max 0.03 (old) | 41.4 s | 308.6 | 0.74 t |
+| **60, 0.06 (new default)** | **27.2 s** | **313.8** | **0.68 t** |
+| 40, 0.1 | 23.8 s | 308.6 | 0.74 t (worst 0.78 t) |

@@ -36,8 +36,8 @@ pub struct RelaxSettings {
 impl Default for RelaxSettings {
     fn default() -> Self {
         RelaxSettings {
-            iterations: 120,
-            dt_max: 0.03,
+            iterations: 60,
+            dt_max: 0.06,
             k_stretch: 40.0,
             k_shear: 10.0,
             k_bend: 20.0,
