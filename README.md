@@ -14,6 +14,7 @@ Markov chain opens the flower.
 | `viewer/` | TypeScript + three.js viewer and glTF export |
 | `tools/` | Python helpers for inspecting core output |
 | `prototype-python/` | The original 2D Python prototype, kept for reference |
+| `docs/` | LaTeX documentation of how each model stage works (`make -C docs`) |
 
 ## Building
 
@@ -29,7 +30,7 @@ The Rust toolchain is pinned in `rust-toolchain.toml`.
 A seed must give the same bud, bit for bit, in every build. CI enforces it:
 
 - `checks/golden/digests.txt` lists a SHA-256 of the exported bud for each reference seed.
-- CI computes those digests on Linux, macOS, Windows and WebAssembly and fails if any differ from the file.
+- CI checks those digests on Linux, macOS and Windows (in the tests) and under WebAssembly, and fails if any differ from the file.
 - When a change is meant to alter flowers, run `BLESS=1 cargo test -p automark-checks` and commit the updated file with the change, so the diff shows which seeds changed.
 
 Rules the core follows to keep this true:

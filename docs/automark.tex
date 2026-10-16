@@ -1,0 +1,54 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathmorphing}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cleveref}
+
+\input{macros}
+
+\title{AutoMarkBloom: how the model grows a flower}
+\author{Living model documentation}
+\date{Checked against \texttt{main} at \texttt{\docsyncedcommit} on \docsynced}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+AutoMarkBloom grows a flower from a single integer seed in two stages.
+A stochastic cellular automaton running on nested egg-shaped shells decides how
+many petals a bud has and where each one sits. Each petal then becomes a thick
+spline sheet, and the sheets are packed into the bud by minimising one smooth,
+differentiable energy. A per-flower Markov chain will then open the flower, and
+a logistic-map stage will colour it. This document explains each step as it is
+implemented, states which parts are built, being reworked or still only
+designed, and is updated whenever a stage changes.
+\end{abstract}
+
+\tableofcontents
+
+\input{sections/status}
+\input{sections/overview}
+\input{sections/seeds}
+\input{sections/shells}
+\input{sections/automaton}
+\input{sections/sheets}
+\input{sections/packing}
+\input{sections/output}
+\input{sections/flowering}
+\input{sections/colour}
+\input{sections/determinism}
+\input{sections/future}
+
+\appendix
+\input{sections/symbols}
+
+\end{document}

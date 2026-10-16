@@ -4,13 +4,14 @@
 
 use wasm_bindgen::prelude::*;
 
-/// The packed bud for `seed` as flower JSON (see viewer/FORMAT.md).
+/// The packed bud of flower `flower_index` on plant `seed`, as flower JSON
+/// (see viewer/FORMAT.md).
 #[wasm_bindgen]
-pub fn bud_json(seed: u64) -> String {
-    automark_core::grow_bud_json(seed)
+pub fn bud_json(seed: u64, flower_index: u32) -> String {
+    automark_core::grow_bud_json(seed, flower_index as u64)
 }
 
-/// SHA-256 of `bud_json(seed)`; matches `checks/golden/digests.txt` when the
+/// SHA-256 of `bud_json(seed, 0)`; matches `checks/golden/digests.txt` when the
 /// browser build agrees with native builds.
 #[wasm_bindgen]
 pub fn bud_digest(seed: u64) -> String {

@@ -236,9 +236,14 @@ async function loadSeed(seed: string) {
   const fi = Math.max(0, Math.floor(Number($<HTMLInputElement>("flowerIdx").value) || 0));
   if (sourceSel.value !== "core") return show(stubFlower(Number(seed) | 0, fi), `Stub flower`);
   const mine = ++request;
-  $("info").textContent = `Growing bud ${seed}…`;
+  const t0 = performance.now();
+  const tick = () => {
+    if (mine === request) $("info").textContent = `Growing plant ${seed}, flower ${fi}… ${Math.round((performance.now() - t0) / 1000)} s`;
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
   try {
-    const { json, ms } = await growBud(seed, fi);
+    const { json, ms } = await growBud(seed, fi).finally(() => clearInterval(timer));
     if (mine !== request) return; // a newer seed was asked for meanwhile
     show(validate(JSON.parse(json)), `Core bud (${Math.round(ms)} ms)`);
   } catch (e) {

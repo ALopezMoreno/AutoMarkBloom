@@ -1,0 +1,34 @@
+\section{Same seed, same flower}\label{sec:determinism}
+\stagebox{\statusbuilt}{\src{core/src/math.rs}, \src{core/src/rng.rs}, \src{checks/}, \src{.github/workflows/ci.yml}}
+
+A seed must give the same bud, bit for bit, on every machine and in every
+engine, including the browser build. Three rules make that true.
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{One specified generator.} All randomness comes from the PCG32
+  streams of \cref{sec:seeds}, never from a library or the operating system.
+\item \textbf{Portable maths.} Platform maths libraries can differ in the last
+  bit of $\exp$, $\ln$, $\sin$, $\cos$, $x^y$ and $\operatorname{atan2}$, and
+  those differences grow through thousands of relaxation steps. All
+  transcendental functions go through the \texttt{libm} crate, a pure-Rust
+  implementation that gives the same bits everywhere. Square roots and basic
+  arithmetic are correctly rounded by IEEE~754 on every target.
+\item \textbf{No hidden ordering.} Floating-point addition is not associative,
+  so nothing that reaches the output may depend on hash-map iteration order or
+  on threads summing in varying order. The contact search uses a hash map for
+  lookup only and sorts its result (\cref{sec:packing}).
+\end{enumerate}
+
+\subsection{How it is checked}
+\begin{itemize}[leftmargin=*]
+\item The canonical output for a seed is the flower JSON of the peony preset
+  with default settings (\texttt{grow\_bud\_json}).
+\item \src{checks/golden/digests.txt} holds a SHA-256 of that output for eight
+  reference seeds, chosen to cover small, large and bit-pattern values: 0, 1,
+  2, 7, 42, 1234, \texttt{0xDEADBEEF} and $2^{64}-1$.
+\item CI computes the digests on Linux, macOS, Windows and WebAssembly and
+  fails if any differ from the file.
+\item A change that is meant to alter flowers re-runs the check with
+  \texttt{BLESS=1} and commits the new file with the change, so the diff shows
+  which seeds changed.
+\end{itemize}

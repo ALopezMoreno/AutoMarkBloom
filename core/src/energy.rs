@@ -1,10 +1,15 @@
 //! The smooth packing energy and its exact gradient.
 //!
 //! E = springs (stretch, shear and bending, with bending stiffness ~ t^3)
-//!   + band   (each node stays in its layer's slot, less its own thickness)
+//!   + band   (a loose pull toward the petal's own layer: it may stray
+//!     `layer_freedom` slots, so petals can fold across layers; layers
+//!     spread out in proportion as the envelope swells)
 //!   + envelope / core (stay inside the sepals and outside the stamens)
+//!   + sepal  (the sepal envelope's radius R is itself a variable; it
+//!     resists growing past its rest size, so petal pressure swells it)
 //!   + contact (a node of one petal stays (t_i + t_j)/2 from the control
 //!     mesh of every other petal: point-triangle distance, not node-node)
+//!
 //! Every term is a squared hinge or spring, so E is C1 and its gradient is
 //! exact. `tests/` checks it against finite differences.
 //!
@@ -38,7 +43,10 @@ impl Hasher for CellHasher {
 pub struct Spring {
     pub a: usize,
     pub b: usize,
+    /// Current rest length (laid-out length times growth).
     pub rest: f64,
+    /// Laid-out length.
+    pub rest0: f64,
     pub k: f64,
 }
 
@@ -47,12 +55,23 @@ pub struct Params {
     pub k_band: f64,
     pub k_env: f64,
     pub k_contact: f64,
+    /// Sepal stiffness against swelling.
+    pub k_sepal: f64,
+    /// Slot half-width multiplier for the band term.
+    pub layer_freedom: f64,
 }
 
 impl Default for Params {
     fn default() -> Self {
-        Params { k_band: 400.0, k_env: 400.0, k_contact: 1500.0 }
+        Params { k_band: 150.0, k_env: 400.0, k_contact: 1500.0, k_sepal: 50.0, layer_freedom: 1.0 }
     }
+}
+
+/// The sepal envelope: current scaled radius and rest radius.
+#[derive(Clone, Copy, Debug)]
+pub struct Envelope {
+    pub r: f64,
+    pub rest: f64,
 }
 
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
@@ -61,11 +80,12 @@ pub struct Terms {
     pub band: f64,
     pub envelope: f64,
     pub contact: f64,
+    pub sepal: f64,
 }
 
 impl Terms {
     pub fn total(&self) -> f64 {
-        self.springs + self.band + self.envelope + self.contact
+        self.springs + self.band + self.envelope + self.contact + self.sepal
     }
 }
 
@@ -225,10 +245,17 @@ impl System {
         out
     }
 
-    /// How far a node sits outside its layer slot (negative when inside).
-    pub fn band_excess(&self, i: usize, p: [f64; 3]) -> (f64, f64) {
-        let a = self.shells.radius[self.layer[i]];
-        let halfw = ((self.shells.slot - self.thick[i]) * 0.5).max(0.0);
+    /// How much a layer's radius moves per unit of envelope radius: layers
+    /// keep their relative place between the stamens and the sepals.
+    pub fn layer_weight(&self, layer: usize) -> f64 {
+        (self.shells.radius[layer] - self.shells.core) / (self.shells.envelope - self.shells.core)
+    }
+
+    /// How far a node sits outside its layer's band (negative when inside),
+    /// and which side it is on.
+    pub fn band_excess(&self, i: usize, p: [f64; 3], env_r: f64) -> (f64, f64) {
+        let a = self.shells.core + self.layer_weight(self.layer[i]) * (env_r - self.shells.core);
+        let halfw = ((self.shells.slot * self.params.layer_freedom - self.thick[i]) * 0.5).max(0.0);
         let r = self.shells.scaled_radius(p);
         ((r - a).abs() - halfw, (r - a).signum())
     }
@@ -237,12 +264,15 @@ impl System {
     /// the given candidate list (see `candidates`); its gradient follows the
     /// envelope theorem for point-triangle distance, so it is exact wherever
     /// the closest point is unique.
-    pub fn energy(&self, x: &[[f64; 3]], cands: &[Candidate], grad: &mut [[f64; 3]]) -> Terms {
+    pub fn energy(&self, x: &[[f64; 3]], env: Envelope, cands: &[Candidate], grad: &mut [[f64; 3]], genv: &mut f64) -> Terms {
         for g in grad.iter_mut() {
             *g = [0.0; 3];
         }
         let mut t = Terms::default();
         let p = self.params;
+        let ds = env.r - env.rest;
+        t.sepal = 0.5 * p.k_sepal * ds * ds;
+        *genv = p.k_sepal * ds;
 
         for s in &self.springs {
             let d = sub(x[s.a], x[s.b]);
@@ -257,16 +287,18 @@ impl System {
         for (i, &xi) in x.iter().enumerate() {
             let gr = self.shells.grad_scaled_radius(xi);
             let r = self.shells.scaled_radius(xi);
-            let (ex, sign) = self.band_excess(i, xi);
+            let (ex, sign) = self.band_excess(i, xi, env.r);
             if ex > 0.0 {
                 t.band += 0.5 * p.k_band * ex * ex;
                 add_scaled(&mut grad[i], p.k_band * ex * sign, gr);
+                *genv -= p.k_band * ex * sign * self.layer_weight(self.layer[i]);
             }
             let half = 0.5 * self.thick[i];
-            let out = r - (self.shells.envelope - half);
+            let out = r - (env.r - half);
             if out > 0.0 {
                 t.envelope += 0.5 * p.k_env * out * out;
                 add_scaled(&mut grad[i], p.k_env * out, gr);
+                *genv -= p.k_env * out;
             }
             let inn = (self.shells.core + half) - r;
             if inn > 0.0 {
@@ -293,5 +325,26 @@ impl System {
             // dmin depends on thickness only, which is fixed, so no extra terms.
         }
         t
+    }
+
+    /// Contact plus envelope force magnitude felt by each node.
+    pub fn pressure(&self, x: &[[f64; 3]], env: Envelope, cands: &[Candidate]) -> Vec<f64> {
+        let p = self.params;
+        let mut out = vec![0.0; x.len()];
+        for c in self.contacts(x, cands) {
+            let f = p.k_contact * (c.dmin - c.d);
+            out[c.node] += f;
+            let [a, b, cc] = self.tris[c.tri];
+            for (m, v) in [a, b, cc].into_iter().enumerate() {
+                out[v] += f * c.bary[m];
+            }
+        }
+        for (i, &xi) in x.iter().enumerate() {
+            let o = self.shells.scaled_radius(xi) - (env.r - 0.5 * self.thick[i]);
+            if o > 0.0 {
+                out[i] += p.k_env * o;
+            }
+        }
+        out
     }
 }

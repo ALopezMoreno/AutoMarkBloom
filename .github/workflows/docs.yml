@@ -1,0 +1,33 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Flag doc sections whose code changed
+        if: github.event_name == 'pull_request'
+        run: docs/check-sync.sh origin/${{ github.base_ref }}
+      - name: Install TeX
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            latexmk lmodern texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended \
+            pandoc poppler-utils
+      - name: Build PDF and web page
+        run: |
+          make -C docs
+          make -C docs html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: automark-docs
+          path: |
+            docs/automark.pdf
+            docs/build/automark.html
