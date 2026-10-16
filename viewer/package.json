@@ -5,7 +5,7 @@
     "dev": "vite",
     "build": "tsc -p . && vite build",
     "check": "node checks/shots.mjs",
-    "sample": "python3 scripts/pack_sample.py ${SRC:-/mnt/project-files/automark-bloom/output/flower_11_0.json} public/samples/flower_11_0.json"
+    "sample": "python3 scripts/to_amb.py ${SRC:-/mnt/project-files/automark-bloom/output/flower_11_0.json} public/samples/flower_11_0.amb.txt"
   },
   "author": "",
   "license": "ISC",

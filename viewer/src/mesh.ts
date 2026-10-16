@@ -29,6 +29,8 @@ export class FlowerMesh {
   readonly channels: Channels;
   /** 0 = packed; larger pushes each layer outward along its petals' attachment angle. */
   explode = 0;
+  /** Curved (Catmull-Rom) interpolation between saved steps instead of straight lines. */
+  smooth = true;
   private readonly perPetal: number;
   private readonly natural: Float32Array;
   private readonly byLayer: Float32Array;
@@ -198,10 +200,25 @@ export class FlowerMesh {
     const last = this.frameCount - 1;
     const tc = Math.min(last, Math.max(0, time));
     const f0 = Math.floor(tc), f1 = Math.min(last, f0 + 1), a = tc - f0;
-    const A = this.doc.frames[f0].petals, B = this.doc.frames[f1].petals;
+    const frames = this.doc.frames;
+    const A = frames[f0].petals, B = frames[f1].petals;
+    if (!this.smooth || a === 0 || last < 2) {
+      A.forEach((pa, pi) => {
+        const pb = B[pi], s = this.samples[pi];
+        for (let j = 0; j < 3 * n; j++) s.mid[j] = pa.mid[j] + (pb.mid[j] - pa.mid[j]) * a;
+        for (let j = 0; j < n; j++) s.thick[j] = pa.thick[j] + (pb.thick[j] - pa.thick[j]) * a;
+      });
+      return this.samples;
+    }
+    // Catmull-Rom through the neighbouring steps (ends repeat), so motion has no corners at saved steps.
+    const Z = frames[Math.max(0, f0 - 1)].petals, C = frames[Math.min(last, f1 + 1)].petals;
+    const a2 = a * a, a3 = a2 * a;
+    const w0 = 0.5 * (-a3 + 2 * a2 - a), w1 = 0.5 * (3 * a3 - 5 * a2 + 2);
+    const w2 = 0.5 * (-3 * a3 + 4 * a2 + a), w3 = 0.5 * (a3 - a2);
     A.forEach((pa, pi) => {
-      const pb = B[pi], s = this.samples[pi];
-      for (let j = 0; j < 3 * n; j++) s.mid[j] = pa.mid[j] + (pb.mid[j] - pa.mid[j]) * a;
+      const pz = Z[pi], pb = B[pi], pc = C[pi], s = this.samples[pi];
+      for (let j = 0; j < 3 * n; j++) s.mid[j] = w0 * pz.mid[j] + w1 * pa.mid[j] + w2 * pb.mid[j] + w3 * pc.mid[j];
+      // Thickness stays linear: a cubic could overshoot below zero.
       for (let j = 0; j < n; j++) s.thick[j] = pa.thick[j] + (pb.thick[j] - pa.thick[j]) * a;
     });
     return this.samples;
