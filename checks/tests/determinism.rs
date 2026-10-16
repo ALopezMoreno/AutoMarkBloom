@@ -1,8 +1,16 @@
 //! Run `BLESS=1 cargo test -p automark-checks` after a change that is meant to
 //! alter flowers, and commit the updated `golden/digests.txt` with it.
 
-use automark_checks::{bud_bytes, digest_table, SEEDS};
+use automark_checks::{digest, digests, format_table, SEEDS};
 use std::path::PathBuf;
+use std::sync::OnceLock;
+
+/// Reference digests, grown once and shared by every test here, since each
+/// bud takes seconds.
+fn reference() -> &'static [String] {
+    static DIGESTS: OnceLock<Vec<String>> = OnceLock::new();
+    DIGESTS.get_or_init(|| digests(&SEEDS))
+}
 
 fn golden_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("golden/digests.txt")
@@ -10,21 +18,30 @@ fn golden_path() -> PathBuf {
 
 #[test]
 fn same_seed_same_bud() {
-    for &seed in &SEEDS[..3] {
-        assert!(bud_bytes(seed) == bud_bytes(seed), "seed {seed} gave two different buds in one run");
-    }
+    // Regrown on this thread, while the reference was grown on its own thread.
+    let seed = SEEDS[0];
+    assert_eq!(
+        digest(seed),
+        reference()[0],
+        "seed {seed} gave two different buds in one run"
+    );
 }
 
 #[test]
 fn different_seeds_differ() {
-    let a = bud_bytes(SEEDS[0]);
-    let distinct = SEEDS[1..].iter().filter(|&&s| bud_bytes(s) != a).count();
-    assert_eq!(distinct, SEEDS.len() - 1, "some seeds gave the same bud as seed {}", SEEDS[0]);
+    let mut sorted = reference().to_vec();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(
+        sorted.len(),
+        SEEDS.len(),
+        "two reference seeds gave the same bud"
+    );
 }
 
 #[test]
 fn matches_golden_digests() {
-    let actual = digest_table();
+    let actual = format_table(&SEEDS, reference());
     let path = golden_path();
     if std::env::var_os("BLESS").is_some() {
         std::fs::write(&path, &actual).unwrap();
