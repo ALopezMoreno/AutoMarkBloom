@@ -39,6 +39,10 @@
     #info { display: none; }
     button, input[type=number], select { padding: 6px 8px; }
   }
+  .clegend { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+  .clegend[hidden] { display: none; }
+  .clegend .bar { flex: 1; height: 8px; border-radius: 4px; min-width: 80px; }
+  .clegend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-left: 4px; }
   .val { text-align: right; color: var(--muted); font-size: 12px; }
   #schem { position: absolute; right: 12px; bottom: 12px; width: min(380px, calc(100% - 24px)); background: var(--panel); backdrop-filter: blur(8px);
     border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; z-index: 2; }
@@ -79,6 +83,7 @@
   <h1>AutoMarkBloom</h1>
   <div class="row"><label for="source">Flower</label><select id="source"><option value="core" hidden>Rust core (any seed)</option><option value="stub">Stub (any seed)</option><option value="samples/bud_11.json">Core bud, seed 11</option><option value="samples/bud_2027.json">Core bud, seed 2027</option></select></div>
   <div class="row" id="seedRow"><label for="seed">Seed</label><input id="seed" type="number" value="7" min="0" /><button id="reroll" title="Random seed">Random</button></div>
+  <div class="row" id="flowerRow"><label for="flowerIdx" title="Sibling flowers on the same plant">Flower #</label><input id="flowerIdx" type="number" value="0" min="0" step="1" /><button id="sibling" title="Next sibling flower on this plant">Next sibling</button></div>
   <div>
     <div class="row"><label>Opening</label><span id="frame" style="text-align:right;color:var(--muted);font-size:12px"></span></div>
     <input id="time" type="range" min="0" max="1" step="0.001" value="0" />
@@ -86,6 +91,7 @@
   <div class="row"><button id="play" class="primary">Play</button><button id="prev">◀ Step</button><button id="next">Step ▶</button></div>
   <details id="views" open><summary>Bud views</summary><div class="more">
   <div class="row"><label for="colour">Colour</label><select id="colour"><option value="natural">Natural</option><option value="layer">By layer</option></select></div>
+  <div id="colourLegend" class="clegend" hidden></div>
   <div><div class="row"><label for="explode">Exploded</label><span class="val" id="explodeVal">off</span></div><input id="explode" type="range" min="0" max="1" step="0.01" value="0" /></div>
   <div><div class="row"><label for="peel">Layers shown</label><span class="val" id="peelVal"></span></div><input id="peel" type="range" min="1" max="1" step="1" value="1" /></div>
   <div class="row"><label for="section">Section</label><select id="section"><option value="off">Off</option><option value="vertical">Vertical, through the axis</option><option value="horizontal">Horizontal slice</option></select></div>
@@ -96,7 +102,7 @@
   </div></details>
   <details id="more" open><summary>More options</summary><div class="more">
   <div class="row"><label for="speed">Speed</label><select id="speed"><option value="4">4 steps/s</option><option value="12" selected>12 steps/s</option><option value="24">24 steps/s</option></select></div>
-  <div class="row"><label><input id="shells" type="checkbox" /> Shells</label><label><input id="wire" type="checkbox" /> Wireframe</label></div>
+  <div class="row"><label><input id="shells" type="checkbox" /> Shells and sepals</label><label><input id="wire" type="checkbox" /> Wireframe</label></div>
   <div class="row"><button id="glbStatic">Export pose .glb</button><button id="glbAnim">Export opening .glb</button></div>
   <div class="row"><button id="load">Load core JSON…</button><input id="file" type="file" accept=".json,application/json" hidden /></div>
   </div></details>

@@ -8,6 +8,7 @@
 import * as THREE from "three";
 import type { FlowerDoc } from "./format";
 import { layerColor } from "./palette";
+import { Channels } from "./channels";
 
 const BASE = new THREE.Color("#fbeedd");
 const PINK = new THREE.Color("#e9849f");
@@ -23,6 +24,7 @@ export class FlowerMesh {
   readonly mesh: THREE.Mesh;
   readonly geometry = new THREE.BufferGeometry();
   readonly layerCount: number;
+  readonly channels: Channels;
   /** 0 = packed; larger pushes each layer outward along its petals' attachment angle. */
   explode = 0;
   private readonly perPetal: number;
@@ -42,6 +44,7 @@ export class FlowerMesh {
     this.samples = doc.petals.map(() => ({ mid: new Float32Array(3 * n), thick: new Float32Array(n) }));
     const layers = [...new Set(doc.petals.map((p) => p.layer))].sort((a, b) => a - b);
     this.layerCount = layers.length;
+    this.channels = new Channels(doc);
     this.layerIndex = doc.petals.map((p) => layers.indexOf(p.layer));
 
     const pos = new Float32Array(P * this.perPetal * 3);
@@ -108,10 +111,39 @@ export class FlowerMesh {
     return this.natural;
   }
 
-  setColorMode(mode: "natural" | "layer") {
+  /** "natural", "layer", or the name of a declared channel (coloured at `time`). */
+  setColorMode(mode: string, time = 0) {
     const attr = this.geometry.getAttribute("color") as THREE.BufferAttribute;
-    (attr.array as Float32Array).set(mode === "layer" ? this.byLayer : this.natural);
+    const arr = attr.array as Float32Array;
+    if (mode === "natural") arr.set(this.natural);
+    else if (mode === "layer") arr.set(this.byLayer);
+    else this.channels.colors(mode, time, arr);
     attr.needsUpdate = true;
+  }
+
+  /**
+   * Sepal (envelope) scaled radius at `time`: the sepal_radius channel, else the
+   * legacy per-frame or shells envelope, else just outside the outermost shell.
+   */
+  envelope(time: number): number {
+    const ch = this.channels.flowerScalar("sepal_radius", time);
+    if (ch !== undefined) return ch;
+    const fr = this.doc.frames, last = fr.length - 1;
+    const tc = Math.min(last, Math.max(0, time));
+    const f0 = Math.floor(tc), f1 = Math.min(last, f0 + 1);
+    const a = fr[f0].envelope, b = fr[f1].envelope;
+    if (a !== undefined) return b !== undefined ? a + (b - a) * (tc - f0) : a;
+    const sh = this.doc.shells;
+    if (sh.envelope !== undefined) return sh.envelope;
+    const r = sh.radius;
+    const slot = sh.slot ?? (r.length > 1 ? r[1] - r[0] : 0.1);
+    return (r[r.length - 1] ?? sh.core) + slot / 2;
+  }
+
+  /** "step k: bud t=-0.50" style label for a frame. */
+  frameLabel(time: number): string {
+    const f = this.doc.frames[Math.round(Math.min(this.frameCount - 1, Math.max(0, time)))];
+    return `${f.stage ?? (f.t <= 0 ? "bud" : "open")} t=${f.t.toFixed(2)}`;
   }
 
   /** Draw only layers 0..k-1 (k = layerCount shows everything). */
@@ -149,13 +181,14 @@ export class FlowerMesh {
     const { nu, nv } = this.doc.grid;
     const n = nu * nv;
     const m = new Float32Array(3 * n);
+    const env = this.envelope(time);
     this.sample(time).forEach((s, pi) => {
       const petal = this.doc.petals[pi];
       const li = this.layerIndex[pi];
       // Outer layers slide outward, inner layers rise out of the bud.
       const frac = li / Math.max(1, this.layerCount - 1);
-      const push = explode * this.doc.shells.envelope * (0.1 + 0.9 * frac);
-      const lift = explode * this.doc.shells.envelope * this.doc.shells.aspect * 1.2 * (1 - frac);
+      const push = explode * env * (0.1 + 0.9 * frac);
+      const lift = explode * env * this.doc.shells.aspect * 1.2 * (1 - frac);
       const ox = push * Math.cos(petal.theta), oy = push * Math.sin(petal.theta);
       // core (x, y, z) z-up  ->  three (x, z, -y) y-up
       for (let j = 0; j < 3 * n; j += 3) {

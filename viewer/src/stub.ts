@@ -1,7 +1,7 @@
 // Stand-in flower generator that emits the FORMAT.md contract until the Rust
 // core produces real output. Shapes are plausible, not physically packed.
 
-import type { FlowerDoc, PetalFrame, PetalInfo } from "./format";
+import type { FlowerDoc, Frame, PetalFrame, PetalInfo } from "./format";
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -21,11 +21,14 @@ const smooth = (x: number) => {
   return c * c * (3 - 2 * c);
 };
 
-export function stubFlower(seed: number, frames = 48, nu = 14, nv = 11): FlowerDoc {
-  const rnd = mulberry32(seed * 2654435761 + 12345);
+export function stubFlower(seed: number, flowerIndex = 0, frames = 48, nu = 14, nv = 11): FlowerDoc {
+  // Plant traits come from the seed; each sibling flower draws its own petals around them.
+  const plant = mulberry32(seed * 2654435761 + 12345);
+  const layers = 6 + Math.floor(plant() * 4);
+  const aspect = 1.15 + 0.35 * plant();
+  const rnd = mulberry32(seed * 2654435761 + 12345 + (flowerIndex + 1) * 97531);
   const range = (a: number, b: number) => a + (b - a) * rnd();
-  const layers = 6 + Math.floor(rnd() * 4);
-  const aspect = range(1.15, 1.5);
+  const vigour = flowerIndex === 0 ? 1 : range(0.8, 1.0);
   const maxThick = range(0.025, 0.04);
   const edgeThick = range(0.3, 0.5);
   const slot = maxThick * (1 + range(0.6, 1.2));
@@ -40,6 +43,8 @@ export function stubFlower(seed: number, frames = 48, nu = 14, nv = 11): FlowerD
     phiTop: number;
     phase: number;
     crumple: number;
+    delay: number;
+    type: number;
   }
   const petals: P[] = [];
   let id = 0;
@@ -54,12 +59,14 @@ export function stubFlower(seed: number, frames = 48, nu = 14, nv = 11): FlowerD
       const theta = stagger + (2 * Math.PI * i) / n + range(-0.15, 0.15);
       petals.push({
         info: { id: id++, layer: k, theta },
-        a: radius[k],
+        a: radius[k] * vigour,
         width: ((2 * Math.PI) / n) * range(1.15, 1.45),
         budLen: 0,
         phiTop: phiTop * range(0.95, 1.0),
         phase: rnd() * 10,
         crumple: range(0.5, 1),
+        delay: range(-0.08, 0.08),
+        type: k < layers / 3 ? 2 : k < (2 * layers) / 3 ? 1 : 0,
       });
     }
   }
@@ -75,7 +82,7 @@ export function stubFlower(seed: number, frames = 48, nu = 14, nv = 11): FlowerD
       const k = p.info.layer;
       const outer = k / Math.max(1, layers - 1);
       // Outer petals open first.
-      const prog = smooth((t - (1 - outer) * 0.45) / 0.55);
+      const prog = smooth((t - (1 - outer) * 0.45 - p.delay) / 0.55);
       const r0 = p.a * Math.sin(PHI_BASE);
       const z0 = -aspect * p.a * Math.cos(PHI_BASE);
       // Bud curve is the shell meridian (sampled by arc length); the open curve
@@ -144,12 +151,30 @@ export function stubFlower(seed: number, frames = 48, nu = 14, nv = 11): FlowerD
     format: "automark-flower",
     version: 1,
     seed: String(seed),
-    flower_index: null,
+    flower_index: flowerIndex,
     units: "core_radius",
     up: "+z",
-    shells: { aspect, core: 1, envelope: 1 + slot * layers, radius },
+    shells: { aspect, core: 1, slot, radius: radius.map((r) => r * vigour) },
     grid: { nu, nv },
     petals: petals.map((p) => p.info),
-    frames: out.map((petals, f) => ({ t: frames === 1 ? 0 : f / (frames - 1), petals })),
+    // Generic channels, as the core emits them: petal latents in the first frame
+    // only (carried forward), the sepal radius every frame as the sepals open.
+    channels: [
+      { name: "onset", scope: "petal", dims: 1, kind: "target" },
+      { name: "petal_type", scope: "petal", dims: 1, kind: "fixed", labels: ["flat", "cupped", "rolled"] },
+      { name: "vigour", scope: "flower", dims: 1, kind: "fixed", range: [0.7, 1.1] },
+      { name: "sepal_radius", scope: "flower", dims: 1, kind: "state" },
+    ],
+    frames: out.map((fr, f): Frame => {
+      const t = frames === 1 ? 0 : f / (frames - 1);
+      return {
+        t,
+        stage: t === 0 ? "bud" : "open",
+        channels: f === 0 ? { vigour, sepal_radius: (1 + slot * layers) * vigour } : ({ sepal_radius: (1 + slot * layers) * vigour * (1 + 1.5 * smooth(t / 0.4)) } as Record<string, number>),
+        petals: fr.map((pf, i) =>
+          f === 0 ? { ...pf, channels: { onset: (1 - petals[i].info.layer / Math.max(1, layers - 1)) * 0.45 + petals[i].delay, petal_type: petals[i].type } } : pf,
+        ),
+      };
+    }),
   };
 }

@@ -7,8 +7,8 @@ let worker: Worker | null = null;
 let nextId = 0;
 const pending = new Map<number, { resolve: (v: { json: string; ms: number }) => void; reject: (e: Error) => void }>();
 
-/** Grows the bud for `seed` (a u64, as a decimal string) and returns its flower JSON. */
-export function growBud(seed: string): Promise<{ json: string; ms: number }> {
+/** Grows flower `flower` of plant `seed` (a u64, as a decimal string) and returns its flower JSON. */
+export function growBud(seed: string, flower = 0): Promise<{ json: string; ms: number }> {
   if (!worker) {
     worker = new Worker(new URL("./coreWorker.ts", import.meta.url), { type: "module" });
     worker.onmessage = (e) => {
@@ -22,6 +22,6 @@ export function growBud(seed: string): Promise<{ json: string; ms: number }> {
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    worker!.postMessage({ id, seed });
+    worker!.postMessage({ id, seed, flower });
   });
 }
