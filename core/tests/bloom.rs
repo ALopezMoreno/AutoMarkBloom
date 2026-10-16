@@ -167,18 +167,27 @@ fn json_continues_the_bud_frames() {
 }
 
 #[test]
-fn outer_petals_open_out_to_the_species_angle() {
+fn peony_opens_its_guard_petals_and_keeps_its_centre_incurved() {
     let b = bud(11, 0);
     let o = open(&b);
     let last = o.frames.last().unwrap();
     let top = b.sheets.iter().map(|s| s.layer).max().unwrap();
-    let [_, outer] = b.species.open_angle;
-    for (p, s) in b.sheets.iter().enumerate().filter(|(_, s)| s.layer == top) {
+    let [inner, outer] = b.species.opening.angle;
+    let rho = |q: [f64; 3]| (q[0] * q[0] + q[1] * q[1]).sqrt();
+    for (p, s) in b.sheets.iter().enumerate() {
         let x = &last.pos[p];
-        let (nu, _) = s.grid();
-        let (base, tip) = (x[nu / 2], x[x.len() - 1 - nu / 2]);
-        let rho = |q: [f64; 3]| (q[0] * q[0] + q[1] * q[1]).sqrt();
+        let (nu, nv) = s.grid();
+        let mid: Vec<[f64; 3]> = (0..nv).map(|v| x[v * nu + nu / 2]).collect();
+        let (base, tip) = (mid[0], mid[nv - 1]);
         let chord = (rho(tip) - rho(base)).atan2(tip[2] - base[2]);
-        assert!(chord > outer - 0.4, "outer petal {p} chord {chord:.2} rad, species asks {outer:.2}");
+        if s.layer == top {
+            assert!(chord > outer - 0.4, "guard petal {p} chord {chord:.2} rad, species asks {outer:.2}");
+        }
+        if s.layer == 0 {
+            // Incurved: upright, with the tip back nearer the axis than the petal's widest point.
+            let widest = mid.iter().map(|&q| rho(q)).fold(0.0, f64::max);
+            assert!(chord < inner + 0.3, "inner petal {p} chord {chord:.2} rad, species asks {inner:.2}");
+            assert!(rho(tip) < widest - 0.02, "inner petal {p} does not curve inward");
+        }
     }
 }

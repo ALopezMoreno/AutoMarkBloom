@@ -86,23 +86,40 @@ pub struct Species {
     pub twist_clockwise: f64,
 
     // Opening (stage 2).
-    /// How far petals open: angle of a fully open petal's base-to-tip chord
-    /// from straight up, for the innermost and outermost layers (radians;
-    /// pi/2 is horizontal, out to the sepals).
+    /// Shape of the open flower, per layer (see `OpeningShape`).
     /// Not written into the bud's JSON, so bud output is unchanged.
-    #[serde(default = "default_open_angle", skip_serializing)]
-    pub open_angle: [f64; 2],
+    #[serde(default, skip_serializing)]
+    pub opening: OpeningShape,
 }
 
-fn default_open_angle() -> [f64; 2] {
-    [1.0, 1.65]
+/// How each layer of petals ends up when open. Pairs are [innermost,
+/// outermost] layer; layers between follow `depth^profile` (depth 0
+/// innermost, 1 outermost), so a large profile keeps most layers near the
+/// inner value and opens only the outer few, like a peony's guard petals.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OpeningShape {
+    /// Angle of a fully open petal's base-to-tip chord from straight up
+    /// (radians; pi/2 is horizontal, out to the sepals).
+    pub angle: [f64; 2],
+    /// How much of the bud's inward curl an open petal keeps, before its
+    /// own `cup` latent adds to it (about 1 = still curled like the bud).
+    pub curl: [f64; 2],
+    pub profile: f64,
+}
+
+impl Default for OpeningShape {
+    /// Peony: incurved inner petals around a cupped centre, guard petals
+    /// opened out to the sepals.
+    fn default() -> Self {
+        OpeningShape { angle: [0.35, 1.65], curl: [0.8, 0.15], profile: 3.0 }
+    }
 }
 
 impl Species {
     pub fn peony() -> Self {
         Species {
             name: "peony".into(),
-            open_angle: default_open_angle(),
+            opening: OpeningShape::default(),
             layers: [6, 10],
             aspect: [1.0, 1.2],
             max_thickness: [0.035, 0.06],

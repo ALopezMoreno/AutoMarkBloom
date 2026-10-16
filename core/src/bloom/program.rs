@@ -12,8 +12,8 @@ use crate::species::Species;
 /// How long one petal takes to open, as a fraction of the opening.
 pub const OPEN_DURATION: f64 = 0.55;
 
-/// Growth toward gain * target + bias, on the petal's own clock and rate.
-fn growth(target: &str, gain: f64, bias: f64, monotone: bool) -> Rule {
+/// Growth toward gain * target + bias (a constant or a channel), on the petal's own clock and rate.
+fn growth(target: &str, gain: f64, bias: impl Into<Param>, monotone: bool) -> Rule {
     Rule::Growth {
         target: Param::Channel(target.into()),
         gain: gain.into(),
@@ -25,10 +25,15 @@ fn growth(target: &str, gain: f64, bias: f64, monotone: bool) -> Rule {
     }
 }
 
+/// A per-layer species setting: inner + (outer - inner) * layer_depth^profile.
+fn by_layer(pair: [f64; 2], profile: f64) -> Rule {
+    Rule::Derived { from: "layer_depth".into(), gain: (pair[1] - pair[0]).into(), bias: pair[0].into(), power: profile.into() }
+}
+
 /// Default opening program (single-opening flowers), with the species'
-/// opening angles.
+/// opening shape.
 pub fn default_program(species: &Species) -> Vec<ChannelSpec> {
-    let [inner, outer] = species.open_angle;
+    let shape = &species.opening;
     let petal = |n: &str, rule: Rule, d: f64| ChannelSpec::new(n, Scope::Petal, 1, rule, vec![d]);
     vec![
         // Bud latents (see `latents`). The bud supplies these; the defaults
@@ -57,17 +62,19 @@ pub fn default_program(species: &Species) -> Vec<ChannelSpec> {
         // How far each petal opens: its chord turns toward the species'
         // angle for its layer (`layer_depth`: 0 innermost, 1 outermost).
         petal("layer_depth", Rule::Fixed, 1.0),
-        petal("splay_angle", Rule::Derived { from: "layer_depth".into(), gain: (outer - inner).into(), bias: inner.into() }, inner),
+        petal("splay_angle", by_layer(shape.angle, shape.profile), shape.angle[0]),
         petal(
             "splay",
             Rule::Growth { target: 1.0.into(), gain: 1.0.into(), bias: 0.0.into(), rate: "rate".into(), onset: "onset".into(), duration: OPEN_DURATION.into(), monotone: true },
             0.0,
         ),
         // How much of the bud's curl a petal still holds (1 = closed bud),
-        // along the petal and across it: cupped inner petals keep most of
-        // it, so the centre stays a bowl, and outer petals lose most of it.
-        petal("memory", growth("cup", 0.6, 0.35, false), 1.0),
-        petal("wrap", growth("cup", 0.5, 0.45, false), 1.0),
+        // along the petal and across it: the species' curl for its layer,
+        // plus more for cupped petals. Peony inner petals keep curving
+        // inward over the centre; guard petals lose most of it.
+        petal("curl_keep", by_layer(shape.curl, shape.profile), shape.curl[0]),
+        petal("memory", growth("cup", 0.6, "curl_keep", false), 1.0),
+        petal("wrap", growth("cup", 0.5, "curl_keep", false), 1.0),
         // Crumples from the bud partly stretch out as the petal expands.
         petal("ruffle_target", Rule::Fixed, 0.6),
         petal("ruffle", growth("ruffle_target", 1.0, 0.0, false), 1.0),
