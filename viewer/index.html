@@ -15,10 +15,14 @@
   #app { position: fixed; inset: 0; }
   #app canvas { display: block; }
   #panel { position: fixed; top: 12px; left: 12px; width: min(300px, calc(100vw - 24px)); background: var(--panel); backdrop-filter: blur(8px);
-    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px;
+    max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
   h1 { font-size: 15px; margin: 0; letter-spacing: .02em; }
   .row { display: flex; gap: 6px; align-items: center; }
-  .row > * { flex: 1; }
+  .row > * { flex: 1; min-width: 0; }
+  #panel { grid-template-columns: minmax(0, 1fr); }
+  #panel select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+  #panel label, #info, .val, #frame { overflow-wrap: anywhere; }
   label { color: var(--muted); font-size: 12px; }
   input[type=number], button, select { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
   button { cursor: pointer; }
@@ -30,7 +34,7 @@
   details > summary::-webkit-details-marker { display: none; }
   details > summary::before { content: "▸ "; }
   details[open] > summary::before { content: "▾ "; }
-  details[open] > .more { display: grid; gap: 10px; margin-top: 10px; }
+  details[open] > .more { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 10px; }
   /* Phones: controls become a bar on top and the flower gets the rest of the screen. */
   @media (max-width: 700px) {
     #app { position: relative; inset: auto; flex: 1; min-height: 0; }
