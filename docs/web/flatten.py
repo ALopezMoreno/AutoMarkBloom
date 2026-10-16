@@ -4,9 +4,17 @@ import re, sys, os
 D = sys.argv[1]; OUT = sys.argv[2]
 main = open(f'{D}/automark.tex').read()
 body = main[main.index(r'\begin{document}')+len(r'\begin{document}'):main.index(r'\end{document}')]
-def inc(m): return open(f'{D}/{m.group(1)}.tex').read()
+def inc(m): return re.sub(r'\\input\{([^}]*)\}', inc, open(f'{D}/{m.group(1)}.tex').read())
 body = re.sub(r'\\input\{([^}]*)\}', inc, body)
 body = re.sub(r'(?m)^\s*%.*$', '', body)
+# number figures for references and captions, as LaTeX does
+fignum = {}; figcount = [0]
+def numfig(m):
+    blk = m.group(0); lab = re.search(r'\\label\{([^}]*)\}', blk)
+    figcount[0] += 1; n = figcount[0]
+    if lab: fignum[lab.group(1)] = f'Figure {n}'
+    return blk.replace(r'\caption{', r'\caption{Figure %d. ' % n, 1)
+body = re.sub(r'\\begin\{figure\}.*?\\end\{figure\}', numfig, body, flags=re.S)
 # figures: tikz -> placeholders
 figs = []
 def fig(m):
@@ -19,14 +27,14 @@ for i,f in enumerate(figs):
 \input{macros}
 \begin{document}'''+f+r'\end{document}')
 # titles for refs
-titles = {}
+titles = dict(fignum)
 for m in re.finditer(r'\\(?:sub)?section\*?\{((?:[^{}]|\{[^{}]*\})*)\}\\label\{([^}]*)\}', body):
     titles[m.group(2)] = m.group(1)
 def clean(t): return re.sub(r'\\[a-zA-Z]+\{?|[{}]', '', t)
 def cref(m):
     parts = [p.strip() for p in m.group(1).split(',')]
     return ' and '.join(r'\hyperref[%s]{%s}' % (p, clean(titles.get(p,p))) for p in parts)
-body = re.sub(r'\\cref\{([^}]*)\}', cref, body)
+body = re.sub(r'\\[cC]ref\{([^}]*)\}', cref, body)
 body = body.replace(r'\statusbuilt', 'STATUS:built').replace(r'\statusrework', 'STATUS:rework').replace(r'\statusplanned','STATUS:planned').replace(r'\statuspaused','STATUS:paused').replace(r'\statusprogress','STATUS:progress')
 body = re.sub(r'\\src\{([^}]*)\}', lambda m: r'\texttt{' + m.group(1).replace('_', r'\_') + '}', body)
 body = re.sub(r'\\stagebox\{((?:[^{}]|\{[^{}]*\})*)\}\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}', r'\n\nSTAGEOPEN \1 SOURCES \2 STAGECLOSE\n\n', body)
