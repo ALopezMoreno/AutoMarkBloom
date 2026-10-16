@@ -31,12 +31,16 @@ pub struct RelaxSettings {
     pub k_core: f64,
     /// Contact samples per quad side.
     pub contact_samples: usize,
+    /// Keep FIRE's velocity and step size from one settling step to the
+    /// next, so the flower keeps moving as it grows instead of starting
+    /// from rest every time.
+    pub carry: bool,
 }
 
 impl Default for RelaxSettings {
     fn default() -> Self {
         RelaxSettings {
-            iterations: 60,
+            iterations: 20,
             dt_max: 0.06,
             k_stretch: 40.0,
             k_shear: 10.0,
@@ -45,6 +49,7 @@ impl Default for RelaxSettings {
             k_contact: 1500.0,
             k_core: 400.0,
             contact_samples: 2,
+            carry: true,
         }
     }
 }
@@ -74,6 +79,8 @@ pub struct Flower {
     pub contacts: Contacts,
     /// Node positions at their petal's last contact refresh.
     anchor: Vec<[f64; 3]>,
+    /// FIRE state carried between settling steps (see `RelaxSettings::carry`).
+    fire: Option<(Vec<[f64; 3]>, f64, f64, usize)>,
     pub shells: Shells,
     pub cap: f64,
 }
@@ -109,7 +116,7 @@ impl Flower {
         let mut contacts = Contacts::new(&layout, s.contact_samples);
         contacts.rebuild(&x, Self::skin_reach(cap).1);
         let (pose, anchor) = (x.clone(), x.clone());
-        Flower { petals, offset, x, thick, owner, pose, contacts, anchor, shells: shells.clone(), cap }
+        Flower { petals, offset, x, thick, owner, pose, contacts, anchor, fire: None, shells: shells.clone(), cap }
     }
 
     /// Verlet skin and contact search reach for a thickness cap.
@@ -201,8 +208,10 @@ impl Flower {
         let (skin, reach) = Self::skin_reach(self.cap);
         self.refresh_contacts(&x, reach, skin);
         let mut grad = vec![[0.0; 3]; n_nodes];
-        let mut vel = vec![[0.0f64; 3]; n_nodes];
-        let (mut dt, mut alpha, mut npos) = (s.dt_max * 0.5, 0.1, 0usize);
+        let (mut vel, mut dt, mut alpha, mut npos) = match self.fire.take() {
+            Some(f) if s.carry => f,
+            _ => (vec![[0.0f64; 3]; n_nodes], s.dt_max * 0.5, 0.1, 0usize),
+        };
         for _ in 0..s.iterations {
             self.refresh_contacts(&x, reach, skin);
             self.energy(&x, t, pose, s, &mut grad);
@@ -254,6 +263,7 @@ impl Flower {
             }
         }
         self.refresh_contacts(&x, reach, skin);
+        self.fire = Some((vel, dt, alpha, npos));
         self.x = x;
         let x = self.x.clone();
         self.energy(&x, t, &self.pose, s, &mut grad)

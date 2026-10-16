@@ -67,3 +67,19 @@ Seed 11 flower 0, 24 frames, measured natively:
   together moved less than the skin. Output is byte-identical. Seed 11 from bud to open went
   from 47 s to 42.5 s. Widening the skin or changing the batching threshold made no
   difference, so what's left is mostly the energy evaluations themselves.
+- **Continuous settle.** FIRE's velocity and step size now carry over from one frame to the
+  next (`RelaxSettings::carry`), so the flower keeps moving as it grows instead of starting
+  from rest every frame. That lets each frame settle in 20 iterations instead of 60. Seed 11
+  on the retuned bud (#20, #22):
+
+| Opening settle | whole flower | final max overlap | change from 60 iterations (RMS / max) |
+|---|---|---|---|
+| 60 iterations, restarting each frame (old) | 53 s | 0.60 t | — |
+| 60, carried over | 55 s | 0.70 t | 0.39 t / 3.0 t |
+| **20, carried over (new default)** | **39 s** | **0.62 t** | **0.52 t / 3.4 t** |
+| 10, carried over | 33 s | 0.85 t | 0.68 t / 4.8 t |
+| no settling, pose only | 21 s | 0.91 t | 1.00 t / 11.9 t |
+
+  The 60-iteration carried-over row shows the solver's own noise: about 0.4 t RMS. At 20
+  iterations the change is barely above that, and every layer's opening angle and incurve
+  is unchanged. Blending the targets over several settling steps within a frame didn't help.
