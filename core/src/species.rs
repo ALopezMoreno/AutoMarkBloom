@@ -76,6 +76,18 @@ pub struct Species {
     /// 0 lets petals crinkle at the finest scale (papery petals, poppy).
     pub zigzag_bending: [f64; 2],
 
+    // Bud shape (species-wide, drawn per plant).
+    /// Egg-shape term of the bud outline: positive broadens the lower body
+    /// and narrows the top, negative the reverse, 0 an ellipsoid. Every
+    /// shell takes this shape, the core included, so beyond about +-0.12
+    /// the core turns visibly triangular.
+    pub bud_egg: [f64; 2],
+    /// Pointed tip: draws the top pole out (0 rounded, about 0.3 a clearly
+    /// pointed bud such as a rose).
+    pub bud_point: [f64; 2],
+    /// Radius of the central bulb (stamens and carpels), in nominal core radii.
+    pub core_size: [f64; 2],
+
     // Petal latents handed to the opening stage (plant-level means).
     /// Overall size potential of the plant's petals.
     pub size_potential: [f64; 2],
@@ -164,6 +176,9 @@ impl Species {
             growth_persistence: [0.5, 0.8],
             growth_anisotropy: [-0.25, 0.15],
             zigzag_bending: [3.0, 5.0],
+            bud_egg: [0.0, 0.08],
+            bud_point: [0.0, 0.1],
+            core_size: [0.85, 1.15],
             size_potential: [0.85, 1.15],
             cup_inner: [0.6, 0.9],
             cup_outer: [0.1, 0.35],

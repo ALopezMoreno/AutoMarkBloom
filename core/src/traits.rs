@@ -74,6 +74,9 @@ pub struct PlantTraits {
     pub growth_persistence: f64,
     pub growth_anisotropy: f64,
     pub zigzag_bending: f64,
+    pub bud_egg: f64,
+    pub bud_point: f64,
+    pub core_size: f64,
     pub size_potential: f64,
     pub cup_inner: f64,
     pub cup_outer: f64,
@@ -158,6 +161,9 @@ impl PlantTraits {
         let growth_persistence = r.range(s.growth_persistence[0], s.growth_persistence[1]);
         let growth_anisotropy = r.range(s.growth_anisotropy[0], s.growth_anisotropy[1]);
         let zigzag_bending = r.range(s.zigzag_bending[0], s.zigzag_bending[1]);
+        let bud_egg = r.range(s.bud_egg[0], s.bud_egg[1]);
+        let bud_point = r.range(s.bud_point[0], s.bud_point[1]);
+        let core_size = r.range(s.core_size[0], s.core_size[1]);
         PlantTraits {
             layers,
             aspect,
@@ -188,6 +194,9 @@ impl PlantTraits {
             growth_persistence,
             growth_anisotropy,
             zigzag_bending,
+            bud_egg,
+            bud_point,
+            core_size,
             size_potential,
             cup_inner,
             cup_outer,

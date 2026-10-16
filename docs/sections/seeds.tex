@@ -82,6 +82,9 @@ Trait & Symbol & Peony range & Meaning \\
 \multicolumn{4}{@{}l}{\emph{Layout: shells and the placement automaton}} \\
 \texttt{layers} & $L$ & 6--10 & number of petal layers (shells) \\
 \texttt{aspect} & $\alpha$ & 1.0--1.2 & bud height over width \\
+\texttt{bud\_egg} & $\eta_e$ & 0--0.08 & egg term of the bud outline: broader below, narrower on top \\
+\texttt{bud\_point} & $\eta_p$ & 0--0.1 & pointed-tip term of the bud outline \\
+\texttt{core\_size} & $s_c$ & 0.85--1.15 & core (stamen and carpel bulb) radius, in nominal core radii \\
 \texttt{max\_thickness} & $\tmax$ & 0.035--0.06 & hard thickness cap, in core radii \\
 \texttt{edge\_thickness} & $e$ & 0.3--0.5 & edge thickness as a fraction of $\tmax$ \\
 \texttt{crumple\_room} & $c$ & 0.3--0.7 & initial room per layer beyond its thickness, in multiples of $\tmax$ \\
@@ -96,7 +99,7 @@ Trait & Symbol & Peony range & Meaning \\
 \texttt{phi\_top\_gap} & $\phi_g$ & 0.10 & how far short of the top pole petals stop (rad) \\
 \multicolumn{4}{@{}l}{\emph{Development: the growth automaton and the sepals}} \\
 \texttt{growth\_stages} & $G$ & 10--14 & number of growth stages \\
-\texttt{growth\_rate} & $\gamma$ & 0.05--0.08 & linear growth per stage of an active node \\
+\texttt{growth\_rate} & $\gamma$ & 0.10--0.16 & linear growth per stage of an active node \\
 \texttt{quiet\_growth} & $q$ & 0.15--0.4 & growth of a quiet node, as a fraction of an active one \\
 \texttt{edge\_boost} & $b_e$ & 0.6--1.4 & extra growth at the petal margin \\
 \texttt{activity\_base} & $a_0$ & 0.15--0.3 & base chance a node is active in a stage \\
@@ -106,6 +109,10 @@ Trait & Symbol & Peony range & Meaning \\
 \texttt{layer\_freedom} & $f$ & 1.5--3.0 & how far a petal may stray from its layer, in slots \\
 \texttt{sepal\_stiffness} & $k_s$ & 5--25 & sepal resistance to swelling \\
 \texttt{sepal\_growth} & $g_s$ & 0.04--0.12 & growth of the sepals' rest size over the bud stage \\
+\texttt{growth\_correlation} & & 1--2 & correlation length of the growth noise, in grid nodes \\
+\texttt{growth\_persistence} & & 0.5--0.8 & how much a node's growth noise carries over between stages \\
+\texttt{growth\_anisotropy} & & $-0.25$--0.15 & split of growth between length (positive) and width (negative) \\
+\texttt{zigzag\_bending} & & 3--5 & resistance to single-node kinks, as a multiple of $k_b$ \\
 \multicolumn{4}{@{}l}{\emph{Latent means handed to the opening stage}} \\
 \texttt{size\_potential} & & 0.85--1.15 & overall size potential of the petals \\
 \texttt{cup\_inner}, \texttt{cup\_outer} & & 0.6--0.9, 0.1--0.35 & cupping target of the innermost and outermost layers \\

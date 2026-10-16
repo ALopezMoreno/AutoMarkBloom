@@ -1,10 +1,11 @@
 // Planar cross-sections of the bud for the 2D packing schematic. Each petal's
 // mid-surface grid is cut by the plane, giving polylines with the petal's
-// thickness along them; shells, core and envelope are drawn as exact conics.
+// thickness along them; shells, core and envelope are drawn from the bud outline.
 
 import type { FlowerDoc } from "./format";
 import type { PetalSample } from "./mesh";
 import { layerCss } from "./palette";
+import { shapeFactor, shellProfile } from "./shape";
 
 export type SectionKind = "vertical" | "horizontal";
 
@@ -73,22 +74,33 @@ const el = (name: string, attrs: Record<string, string | number>) => {
 /** Draws the section schematic into `svg`. */
 export function drawSchematic(svg: SVGSVGElement, doc: FlowerDoc, samples: PetalSample[], sec: Section, visibleLayers: number, envelope: number) {
   svg.replaceChildren();
-  const { aspect, core, radius } = doc.shells;
+  const sh = doc.shells;
+  const { aspect, core, radius } = sh;
   const layers = [...new Set(doc.petals.map((p) => p.layer))].sort((a, b) => a - b);
   const L = layers.length;
   // Petals can sit a little outside the nominal envelope after packing.
   const R = envelope * 1.12;
-  const H = sec.kind === "vertical" ? aspect * R : R;
+  const H = sec.kind === "vertical" ? aspect * R * Math.max(shapeFactor(sh, 1), shapeFactor(sh, -1)) : R;
   const pad = 0.04 * R;
   svg.setAttribute("viewBox", `${-R - pad} ${-H - pad} ${2 * (R + pad)} ${2 * (H + pad)}`);
   const g = el("g", { transform: "scale(1,-1)" }); // +z up on screen
   svg.appendChild(g);
 
-  // Shells as conics through the plane.
+  // Shells cut by the plane: the outline itself in a vertical section, a
+  // circle at the outline's width in a horizontal one.
+  const N = 128;
   const conic = (a: number, cls: string) => {
-    if (sec.kind === "vertical") return el("ellipse", { cx: 0, cy: 0, rx: a, ry: aspect * a, class: cls });
-    const q = 1 - (sec.at / (aspect * a)) ** 2;
-    return q > 0 ? el("circle", { cx: 0, cy: 0, r: a * Math.sqrt(q), class: cls }) : null;
+    const prof = Array.from({ length: N + 1 }, (_, i) => shellProfile(sh, a, (Math.PI * i) / N));
+    if (sec.kind === "vertical") {
+      const pts = [...prof, ...prof.slice(1, N).reverse().map(([r, z]) => [-r, z])];
+      return el("polygon", { points: pts.map(([r, z]) => `${r},${z}`).join(" "), class: cls });
+    }
+    let w = -1;
+    for (let i = 0; i < N; i++) {
+      const [r0, z0] = prof[i], [r1, z1] = prof[i + 1];
+      if (z0 <= sec.at !== z1 <= sec.at) w = Math.max(w, r0 + ((r1 - r0) * (sec.at - z0)) / (z1 - z0));
+    }
+    return w > 0 ? el("circle", { cx: 0, cy: 0, r: w, class: cls }) : null;
   };
   const env = conic(envelope, "envelope");
   if (env) g.appendChild(env);
