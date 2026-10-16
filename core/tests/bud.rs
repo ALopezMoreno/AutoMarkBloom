@@ -143,3 +143,15 @@ fn adding_a_channel_does_not_shift_others() {
     assert_eq!(a.f64(), b.f64());
     assert_ne!(channel_rng(99, "cup").f64(), channel_rng(99, "onset").f64());
 }
+
+#[test]
+fn relax_budget_keeps_the_same_flower() {
+    // Preview and canonical settings differ only in iteration counts, so the
+    // plant, flower traits and petal layout must not depend on them.
+    let s = Species::peony();
+    let a = grow_bud(PlantSeed(11), 1, &s, &quick());
+    let b = grow_bud(PlantSeed(11), 1, &s, &PackSettings { relax_iterations: 5, settle_iterations: 5, ..quick() });
+    assert_eq!(a.traits, b.traits);
+    assert_eq!(a.report.petals, b.report.petals);
+    assert_eq!(a.layout.petals.len(), b.layout.petals.len());
+}
