@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = ["core", "wasm", "checks"]
+
+[workspace.package]
+edition = "2021"
+license = "UNLICENSED"
+
+[profile.release]
+debug = false

@@ -1,0 +1,5 @@
+# Pinned so every machine and CI runner compiles the same float code.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown", "wasm32-wasip1"]
