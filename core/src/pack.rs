@@ -337,14 +337,23 @@ pub fn develop(
     for stage in 1..=t.growth_stages {
         relax.refresh(&sys, &x, true);
         let pressure = sys.pressure(&x, env, &relax.cands);
-        let mut scale = Vec::with_capacity(n);
+        let (mut scale, mut along, mut across) = (Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n));
         for (si, g) in growth.iter_mut().enumerate() {
             let p: Vec<f64> = pressure[si * NU * NV..(si + 1) * NU * NV].iter().map(|f| f / p_ref).collect();
             g.step(&p, t, rng_growth);
             scale.extend_from_slice(&g.scale);
+            along.extend_from_slice(&g.along);
+            across.extend_from_slice(&g.across);
         }
         for s in sys.springs.iter_mut() {
-            s.rest = s.rest0 * 0.5 * (scale[s.a] + scale[s.b]);
+            // Springs within one sheet: index gap 1 or 2 runs across the
+            // petal, NU or 2 NU runs along it, anything else is a diagonal.
+            let f = match s.b - s.a {
+                1 | 2 => &across,
+                d if d == NU || d == 2 * NU => &along,
+                _ => &scale,
+            };
+            s.rest = s.rest0 * 0.5 * (f[s.a] + f[s.b]);
         }
         env.rest = shells.envelope * (1.0 + t.sepal_growth * stage as f64 / t.growth_stages as f64);
         relax.run(&sys, &mut x, &mut env, &pinned, settings.relax_iterations, settings.dt_max);
