@@ -221,6 +221,8 @@ const sourceSel = $<HTMLSelectElement>("source");
 if (coreAvailable) {
   sourceSel.options[0].hidden = false;
   sourceSel.value = "core";
+} else {
+  $("fullRow").style.display = "none";
 }
 
 let request = 0;
@@ -243,9 +245,10 @@ async function loadSeed(seed: string) {
   tick();
   const timer = setInterval(tick, 1000);
   try {
-    const { json, ms } = await growBud(seed, fi).finally(() => clearInterval(timer));
+    const full = $<HTMLInputElement>("fullBud").checked;
+    const { json, ms, preview } = await growBud(seed, fi, full).finally(() => clearInterval(timer));
     if (mine !== request) return; // a newer seed was asked for meanwhile
-    show(validate(JSON.parse(json)), `Core bud (${Math.round(ms)} ms)`);
+    show(validate(JSON.parse(json)), `Core bud${preview ? " (preview)" : ""}, ${(ms / 1000).toFixed(1)} s`);
   } catch (e) {
     if (mine === request) $("err").textContent = String((e as Error).message ?? e);
   }
@@ -259,6 +262,7 @@ function markFileSource(name: string) {
   sourceSel.value = "file";
   $("seedRow").style.display = "none";
   $("flowerRow").style.display = "none";
+  $("fullRow").style.display = "none";
 }
 
 async function loadJsonText(text: string, name: string) {
@@ -277,6 +281,7 @@ $("source").addEventListener("change", async (e) => {
   const seeded = v === "stub" || v === "core";
   $("seedRow").style.display = seeded ? "" : "none";
   $("flowerRow").style.display = seeded ? "" : "none";
+  $("fullRow").style.display = v === "core" ? "" : "none";
   if (seeded) return loadSeed($<HTMLInputElement>("seed").value);
   try {
     loadJsonText(await (await fetch(v)).text(), sourceSel.selectedOptions[0].text);
@@ -286,6 +291,7 @@ $("source").addEventListener("change", async (e) => {
 });
 $("seed").addEventListener("change", () => loadSeed($<HTMLInputElement>("seed").value));
 $("flowerIdx").addEventListener("change", () => loadSeed($<HTMLInputElement>("seed").value));
+$("fullBud").addEventListener("change", () => loadSeed($<HTMLInputElement>("seed").value));
 $("sibling").addEventListener("click", () => {
   const el = $<HTMLInputElement>("flowerIdx");
   el.value = String((Number(el.value) || 0) + 1);
@@ -370,7 +376,7 @@ const q = new URLSearchParams(location.search);
 const src = q.get("src");
 if (src) {
   const opt = [...$<HTMLSelectElement>("source").options].find((o) => o.value === src);
-  if (opt) { sourceSel.value = src; $("seedRow").style.display = "none"; $("flowerRow").style.display = "none"; }
+  if (opt) { sourceSel.value = src; $("seedRow").style.display = "none"; $("flowerRow").style.display = "none"; $("fullRow").style.display = "none"; }
   fetch(src).then((r) => r.text()).then((t) => loadJsonText(t, src)).catch((e) => ($("err").textContent = String(e)));
 } else {
   const seed = q.get("seed") ?? "7";

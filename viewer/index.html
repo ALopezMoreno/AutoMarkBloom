@@ -84,6 +84,7 @@
   <div class="row"><label for="source">Flower</label><select id="source"><option value="core" hidden>Rust core (any seed)</option><option value="stub">Stub (any seed)</option><option value="samples/bud_11.json">Core bud, seed 11</option><option value="samples/bud_2027.json">Core bud, seed 2027</option></select></div>
   <div class="row" id="seedRow"><label for="seed">Seed</label><input id="seed" type="number" value="7" min="0" /><button id="reroll" title="Random seed">Random</button></div>
   <div class="row" id="flowerRow"><label for="flowerIdx" title="Sibling flowers on the same plant">Flower #</label><input id="flowerIdx" type="number" value="0" min="0" step="1" /><button id="sibling" title="Next sibling flower on this plant">Next sibling</button></div>
+  <label id="fullRow" title="Off: fast preview packing. On: the full, canonical bud (much slower)."><input id="fullBud" type="checkbox" /> Full-quality bud (slower)</label>
   <div>
     <div class="row"><label>Opening</label><span id="frame" style="text-align:right;color:var(--muted);font-size:12px"></span></div>
     <input id="time" type="range" min="0" max="1" step="0.001" value="0" />
