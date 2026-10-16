@@ -4,8 +4,8 @@ import re, base64, sys, os
 D = sys.argv[1]
 body = open('body.html').read()
 body = body.replace('id="sec:', 'id="sec-').replace('href="#sec:', 'href="#sec-').replace('id="fig:', 'id="fig-')
-label = {'built':'Built','rework':'Built, being reworked','planned':'Designed, not built','paused':'On hold'}
-body = re.sub(r'STATUS:(built|rework|planned|paused)', lambda m: f'<span class="chip chip-{m.group(1)}">{label[m.group(1)]}</span>', body)
+label = {'built':'Built','rework':'Built, being reworked','planned':'Designed, not built','paused':'On hold','progress':'In progress'}
+body = re.sub(r'STATUS:(built|rework|planned|paused|progress)', lambda m: f'<span class="chip chip-{m.group(1)}">{label[m.group(1)]}</span>', body)
 def box(m):
     st, src = m.group(1).strip(), m.group(2).strip()
     return f'<div class="stage"><div><span class="k">Status</span> {st}</div><div><span class="k">Source</span> {src}</div></div>'

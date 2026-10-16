@@ -1,14 +1,14 @@
 \section{Flowering: the per-flower Markov chain}\label{sec:flowering}
-\stagebox{\statuspaused. Only the 2D Python prototype exists.}{\src{prototype-python/automark_bloom/petal_markov.py} (prototype); 3D core not started}
+\stagebox{\statusprogress. The 3D stage is being built; the 2D Python prototype exists.}{\src{prototype-python/automark_bloom/petal_markov.py} (prototype); 3D core in progress}
 
 Flowering takes over once the bud structure is fixed. Each growth step depends
 probabilistically on the previous state, and each flower draws from its own
 seed (\cref{sec:seeds}). Siblings already differ in their buds
 (\cref{sec:tiers}); the opening adds its own noise on top.
 
-Andres has put building the 3D flowering stage on hold. This section records
-the prototype that exists and the approved design, and will be rewritten when
-the code lands.
+The 3D flowering stage is now being built. Until it lands, this section
+records the prototype that exists and the approved design; it will be
+rewritten when the code is merged.
 
 \subsection{The prototype (2D, discrete)}
 \paragraph{State.} Each petal carries three bin indices: length $\lambda$ (14 bins,

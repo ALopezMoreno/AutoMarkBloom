@@ -27,7 +27,7 @@ def cref(m):
     parts = [p.strip() for p in m.group(1).split(',')]
     return ' and '.join(r'\hyperref[%s]{%s}' % (p, clean(titles.get(p,p))) for p in parts)
 body = re.sub(r'\\cref\{([^}]*)\}', cref, body)
-body = body.replace(r'\statusbuilt', 'STATUS:built').replace(r'\statusrework', 'STATUS:rework').replace(r'\statusplanned','STATUS:planned').replace(r'\statuspaused','STATUS:paused')
+body = body.replace(r'\statusbuilt', 'STATUS:built').replace(r'\statusrework', 'STATUS:rework').replace(r'\statusplanned','STATUS:planned').replace(r'\statuspaused','STATUS:paused').replace(r'\statusprogress','STATUS:progress')
 body = re.sub(r'\\src\{([^}]*)\}', lambda m: r'\texttt{' + m.group(1).replace('_', r'\_') + '}', body)
 body = re.sub(r'\\stagebox\{((?:[^{}]|\{[^{}]*\})*)\}\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}', r'\n\nSTAGEOPEN \1 SOURCES \2 STAGECLOSE\n\n', body)
 body = re.sub(r'\\addcontentsline\{[^}]*\}\{[^}]*\}\{[^}]*\}', '', body)
