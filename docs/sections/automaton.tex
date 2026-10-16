@@ -1,0 +1,85 @@
+\section{The stochastic automaton on each shell}\label{sec:ca}
+\stagebox{\statusrework}{\src{core/src/ca.rs}}
+
+The automaton makes the discrete decisions: how many petals the bud has, where
+each one attaches, and what patch of its shell it wins. It is a cellular
+automaton with stochastic rules, so strictly it is not a pure CA. All draws
+come from the plant's stream 1, so every bud on a plant gets the same layout.
+
+\subsection{Grid}
+Each shell carries a grid of $\NA = 96$ azimuth cells by $\NP = 28$ polar rows.
+Row 0 is the attachment ring and rows run up toward the top. Cell $(r,s)$ has
+azimuth $\theta_s = (s + \tfrac12)\,2\pi/\NA$ and wraps around in $s$. Each cell
+is empty or owned by one petal.
+
+Shells are processed from the innermost ($k=0$) outward, and each shell runs two
+phases.
+
+\subsection{Phase 1: initiation by inhibition}
+New petals (primordia) can only start on row 0, and only where existing
+primordia leave room. A primordium $j$ at angle $\theta_j$ on layer $\ell_j$
+inhibits a cell on layer $k$ at angle $\theta$ by a Gaussian in arc length on
+the current shell,
+\[
+  I_k(\theta) = \sum_j w_{kj}\, \exp\!\left(-\frac{\bigl(a_k\,\Delta(\theta,\theta_j)\bigr)^2}{2\sigma^2}\right),
+  \qquad
+  w_{kj} = \begin{cases} 1 & \ell_j = k,\\ \beta & \ell_j = k-1,\\ 0 & \text{otherwise,}\end{cases}
+\]
+where $\Delta$ is the shortest angular distance. The layer below inhibits with
+weight $\beta$ (stagger), so a new layer's petals tend to sit in the gaps of the
+layer beneath, the way real petals interleave.
+
+Four passes are made over row 0. Each pass visits the empty cells in a freshly
+shuffled order, and a cell becomes a primordium when
+\[
+  I_k(\theta_s) < \tau \quad\text{and}\quad U < p_{\mathrm{init}}.
+\]
+Because inhibition is updated as soon as a primordium appears, the order of
+visits matters, and the shuffles are part of the plant's randomness. Petal count
+and spacing come out of $\sigma$, $\tau$, $p_{\mathrm{init}}$ and $\beta$ rather
+than being set directly.
+
+\paragraph{Target height.} When a primordium is created it draws how many rows
+it may reach. With layer fraction $f_k = k/(L-1)$ (taken as 1 when $L=1$),
+\[
+  H_j = \clamp\Bigl(\round\bigl(\NP\,(h_{\mathrm{in}} + (1-h_{\mathrm{in}}) f_k)\,\Unif[0.85, 1]\bigr),\; 4,\; \NP\Bigr),
+\]
+so inner petals are shorter and outer petals reach nearly to the top.
+
+\subsection{Phase 2: growth by competition}
+Petals then compete for the rest of the shell in synchronous sweeps: every
+sweep reads the grid as it was at the start of the sweep. An empty cell
+$(r,s)$ collects candidate owners from
+\begin{itemize}[leftmargin=*]
+\item the cell below it, $(r-1,s)$, with probability $p_\uparrow$;
+\item the cells beside it, $(r,s\pm1)$, each with probability $p_\leftrightarrow$;
+\end{itemize}
+keeping only petals that have not yet reached their height ($r < H_j$). Starting
+from a uniformly chosen candidate and going round in order, each candidate is
+tried with its probability, and the first success claims the cell. At most
+$3\NP$ sweeps run, stopping early once a sweep changes nothing after the first
+$\NP$.
+
+Petal outlines therefore come from packing: a petal widens until it meets its
+neighbours, and a petal with more room ends up wider. Cells no petal reaches
+stay empty.
+
+\subsection{What the automaton hands on}
+For each petal, the automaton reports its layer, base angle, height and, for
+every row it occupies, the circular mean angle of its cells and their angular
+span $n_r \cdot 2\pi/\NA$. This per-row centre and span is all the sheet stage
+(\cref{sec:sheets}) uses.
+
+\begin{remark}
+In the rework the automaton keeps running while the petals grow and gives each
+patch of each petal its own random growth rate. Patches that grow faster than
+their neighbours must crumple and ruffle, which is where real petal wrinkles
+come from. This section will be rewritten when that lands.
+\end{remark}
+
+\subsection{Relation to the Python prototype}
+The 2D prototype in \src{prototype-python/} ran the same idea on one flat polar
+grid (24 rings by 144 sectors), grown ring by ring from the centre: existing
+petals continue outward, new petals start where inhibition is low, and empty
+cells are claimed by neighbours. The 3D core moves that grid onto one shell per
+layer and adds the stagger between layers.

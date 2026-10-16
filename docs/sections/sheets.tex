@@ -1,0 +1,55 @@
+\section{Thick petal sheets}\label{sec:sheets}
+\stagebox{\statusrework}{\src{core/src/sheet.rs}}
+
+Each petal patch becomes a \emph{thick sheet}: a smooth mid-surface described by
+an $\NU \times \NV = 7 \times 11$ grid of control points (7 across, 11 from base
+to tip), plus a thickness at every control point. The same object will carry
+the petal from the closed bud through the whole opening, which is what makes
+the animation smooth.
+
+\subsection{From patch to control points}
+Let the petal occupy rows $0,\dots,h-1$ of its shell (petals reaching fewer than
+3 rows are dropped). Rows the patch skips get a centre and span by linear
+interpolation between their neighbours; centres are unwrapped around the base
+angle so they never jump across $\pm\pi$. Both sequences are then smoothed twice
+with the kernel $(\tfrac14, \tfrac12, \tfrac14)$.
+
+For control row $v = 0,\dots,\NV-1$ let $f_v = v/(\NV-1)$ and let $\rho = f_v(h-1)$
+be the matching (fractional) automaton row, interpolated linearly to give a
+centre $\bar\theta(\rho)$ and span $S(\rho)$. The petal's outline is shaped by a
+taper that narrows the base into a claw and rounds the tip,
+\[
+  T(f) = \Bigl(\tfrac12 + \tfrac12\min(f/0.2,\,1)\Bigr)\Bigl(0.3 + 0.7\sqrt{\max(0,\,1 - f^4)}\Bigr),
+\]
+and the control points of row $v$ lie on the layer's shell:
+\[
+  \x_{u,v} = P\!\left(a_k,\; \bar\theta(\rho) + \bigl(f_u - \tfrac12\bigr)\,0.92\,S(\rho)\,T(f_v),\; \phi\!\left(\frac{\rho + \frac12}{\NP}\right)\right),
+  \qquad f_u = \frac{u}{\NU - 1}.
+\]
+The factor $0.92$ leaves a small gap between neighbouring petals at the start.
+
+\subsection{Thickness, capped}
+Thickness is greatest at the base and along the midline and falls toward the
+edges and tip:
+\[
+  b(f_u, f_v) = (1 - f_v)^{1.2}\bigl(1 - 0.6\,(2f_u - 1)^2\bigr) \in [0,1],
+  \qquad
+  t_{u,v} = \tmax\bigl(e + (1-e)\,b\bigr).
+\]
+Since $b \le 1$, every thickness is at most $\tmax$, so petals always stay
+thin, and since $b\ge0$ the edge never drops below $e\,\tmax$. A test checks
+the cap on several seeds.
+
+\subsection{Evaluating the surface}
+The control grid is turned into a finer surface by interpolating Catmull--Rom
+splines, first across each control row and then along each resulting column.
+Ends are handled by reflecting the second point through the first (linear
+extrapolation). Thickness is interpolated linearly on the same grid. With
+$s_a$ samples per span along and $s_c$ across, the evaluated grid has
+$(\NV - 1)s_a + 1$ rows and $(\NU - 1)s_c + 1$ columns. Because Catmull--Rom
+splines pass through their control points, the evaluated surface passes
+through every control point.
+
+\begin{remark}
+The rework gives each petal a much finer grid so it can hold small crumples.
+\end{remark}

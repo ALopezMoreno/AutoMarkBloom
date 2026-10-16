@@ -1,0 +1,80 @@
+\section{Nested shells}\label{sec:shells}
+\stagebox{\statusrework}{\src{core/src/shells.rs}}
+
+A bud is layered like an onion. Each petal layer lives on a thin egg-shaped
+shell, and the bud's size follows from how many layers it packs and how thick
+they are.
+
+\subsection{Scaled radius}
+Lengths are in units of the core radius $R_0 = 1$, the radius of the central
+stamen and carpel zone, with $+z$ pointing up. Every shell is a level set of
+the \emph{scaled radius}
+\[
+  \rt(\x) = \sqrt{x^2 + y^2 + (z/\alpha)^2},
+\]
+a spheroid stretched by the aspect $\alpha$ along $z$. Its gradient, used for
+shell normals and by the packing energy, is
+\[
+  \nabla\rt(\x) = \frac{1}{\rt}\Bigl(x,\; y,\; \frac{z}{\alpha^2}\Bigr).
+\]
+
+\subsection{Slots}
+Each layer owns a slot of width
+\[
+  w = \tmax\,(1 + c),
+\]
+the thickest a petal can be plus room to crumple. Slots stack outward from the
+core, so layer $k = 0,\dots,L-1$ has its mid-surface at
+\[
+  a_k = R_0 + w\,(k + \tfrac12),
+\]
+and the inner side of the sepal envelope is at $R_{\mathrm{env}} = R_0 + wL$.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[scale=1.6]
+  \def\al{1.25}   % aspect
+  \def\pb{25.8}   % phi_b in degrees (0.45 rad)
+  \def\pg{5.7}    % phi_g in degrees (0.10 rad)
+  \fill[yellow!25] (0,0) ellipse (1 and \al);
+  \node[font=\small, fill=yellow!25, inner sep=1pt] at (0,0.3) {core $R_0$};
+  \foreach \k/\c in {0/red!50, 1/orange!50, 2/magenta!40} {
+    \pgfmathsetmacro{\a}{1 + 0.3*(\k+0.5)}
+    \draw[\c, line width=3pt, domain=\pb:180-\pg, samples=60, variable=\p]
+      plot ({\a*sin(\p)}, {-\al*\a*cos(\p)});
+    \draw[\c, line width=3pt, domain=\pb:180-\pg, samples=60, variable=\p]
+      plot ({-\a*sin(\p)}, {-\al*\a*cos(\p)});
+  }
+  \draw[dashed, gray] (0,0) ellipse (1.9 and 1.9*\al);
+  \node[font=\small, gray, anchor=west] at (1.25,2.15) {envelope $R_{\mathrm{env}}$};
+  \draw[{Stealth}-{Stealth}] (1.0,0) -- (1.3,0);
+  \node[font=\scriptsize, above] at (1.15,0) {$w$};
+  \draw[gray] (0,-2.6) -- (0,2.6);
+  \node[font=\scriptsize, gray, anchor=west] at (0,2.55) {$z$};
+  \draw[gray] (0,0) -- ({1.9*sin(\pb)}, {-1.9*\al*cos(\pb)});
+  \draw[gray] (0,-0.55) arc[start angle=-90, end angle=-90+\pb, radius=0.55];
+  \node[font=\scriptsize] at (0.22,-0.75) {$\phi_b$};
+\end{tikzpicture}
+\caption{Three layers in their slots, seen in cross-section. Petals attach on
+the ring at polar angle $\phi_b$ from the bottom pole and stop $\phi_g$ short of
+the top pole.}
+\label{fig:shells}
+\end{figure}
+
+\subsection{Shell coordinates}
+A point on the shell of scaled radius $a$ at azimuth $\theta$ and polar angle
+$\phi$ (measured from the bottom pole) is
+\[
+  P(a,\theta,\phi) = \bigl(a\sin\phi\cos\theta,\; a\sin\phi\sin\theta,\; -\alpha a\cos\phi\bigr).
+\]
+Petals occupy polar angles from the attachment ring $\phi_b$ up to
+$\pi - \phi_g$. A fractional height $f\in[0,1]$ maps to
+\[
+  \phi(f) = \phi_b + f\,(\pi - \phi_g - \phi_b).
+\]
+
+\begin{remark}
+The shells are fixed today. The planned rework lets the sepal envelope swell
+when petals push on it, so the bud can bulge outward like a real peony bud
+instead of staying a fixed egg.
+\end{remark}

@@ -14,6 +14,7 @@ Markov chain opens the flower.
 | `viewer/` | TypeScript + three.js viewer and glTF export |
 | `tools/` | Python helpers for inspecting core output |
 | `prototype-python/` | The original 2D Python prototype, kept for reference |
+| `docs/` | LaTeX documentation of how each model stage works (`make -C docs`) |
 
 ## Building
 

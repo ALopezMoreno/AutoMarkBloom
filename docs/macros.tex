@@ -1,0 +1,39 @@
+% Shared notation. Change a symbol here and it changes everywhere.
+
+% Date the docs were last checked against the code (update with every sync).
+\newcommand{\docsynced}{16 October 2026}
+% Commit of main the docs were checked against.
+\newcommand{\docsyncedcommit}{508fcc8}
+
+% Stage status tags
+\definecolor{built}{HTML}{2E7D32}
+\definecolor{rework}{HTML}{E65100}
+\definecolor{planned}{HTML}{1565C0}
+\newcommand{\statusbuilt}{\textcolor{built}{\textbf{built}}}
+\newcommand{\statusrework}{\textcolor{rework}{\textbf{built, being reworked}}}
+\newcommand{\statusplanned}{\textcolor{planned}{\textbf{designed, not built}}}
+\newcommand{\statuspaused}{\textcolor{planned}{\textbf{on hold}}}
+
+% A box at the top of each section naming its status and source files.
+\newcommand{\stagebox}[2]{%
+  \par\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{%
+    \small\textbf{Status:} #1\\\textbf{Source:} #2}}\par\medskip}
+
+\newcommand{\src}[1]{\texttt{\detokenize{#1}}}
+
+% Notation
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\vect}[1]{\mathbf{#1}}
+\newcommand{\x}{\vect{x}}
+\newcommand{\rt}{\tilde r}            % scaled radius
+\newcommand{\tmax}{t_{\max}}          % thickness cap
+\newcommand{\Unif}{\mathcal{U}}
+\newcommand{\Norm}{\mathcal{N}}
+\newcommand{\NA}{N_\theta}            % automaton azimuth cells
+\newcommand{\NP}{N_\phi}              % automaton polar rows
+\newcommand{\NU}{N_u}                 % sheet control points across
+\newcommand{\NV}{N_v}                 % sheet control points along
+\DeclareMathOperator{\clamp}{clamp}
+\DeclareMathOperator{\round}{round}
+
+\newtheorem*{remark}{Remark}
