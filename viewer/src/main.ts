@@ -62,13 +62,17 @@ function show(doc: FlowerDoc, label: string) {
   $("err").textContent = "";
   frame(flower);
   setTime(Math.min(time, flower.frameCount - 1));
+  const still = flower.frameCount < 2;
+  for (const id of ["time", "play", "prev", "next", "glbAnim"]) $<HTMLButtonElement>(id).disabled = still;
 }
 
 /** Point the camera so the fully opened flower fits the view. */
 function frame(fm: FlowerMesh) {
   fm.setTime(fm.frameCount - 1);
   const sphere = fm.geometry.boundingSphere!.clone();
-  const dist = sphere.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
+  const halfV = THREE.MathUtils.degToRad(camera.fov / 2);
+  const halfH = Math.atan(Math.tan(halfV) * camera.aspect);
+  const dist = sphere.radius / Math.sin(Math.min(halfV, halfH)) * 1.2;
   const dir = new THREE.Vector3(0.62, 0.55, 0.75).normalize();
   controls.target.copy(sphere.center);
   camera.position.copy(sphere.center).addScaledVector(dir, dist);
@@ -99,6 +103,16 @@ async function loadJsonText(text: string, name: string) {
 }
 
 // UI
+$("source").addEventListener("change", async (e) => {
+  const v = (e.target as HTMLSelectElement).value;
+  $("seedRow").style.display = v === "stub" ? "" : "none";
+  if (v === "stub") return loadSeed(Number($<HTMLInputElement>("seed").value) | 0);
+  try {
+    loadJsonText(await (await fetch(v)).text(), $<HTMLSelectElement>("source").selectedOptions[0].text);
+  } catch (err) {
+    $("err").textContent = String(err);
+  }
+});
 $("seed").addEventListener("change", () => loadSeed(Number($<HTMLInputElement>("seed").value) | 0));
 $("reroll").addEventListener("click", () => {
   const s = Math.floor(Math.random() * 1e6);
@@ -143,12 +157,18 @@ addEventListener("drop", async (e) => {
   if (f) loadJsonText(await f.text(), f.name);
 });
 
+// The canvas fills #app, which is the whole window on desktop and the space
+// under the control bar on phones.
+const narrow = matchMedia("(max-width: 700px)");
+if (narrow.matches) $<HTMLDetailsElement>("more").open = false;
 function resize() {
-  renderer.setSize(innerWidth, innerHeight);
-  camera.aspect = innerWidth / innerHeight;
+  const el = $("app");
+  const w = el.clientWidth || innerWidth, h = el.clientHeight || innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
-addEventListener("resize", resize);
+new ResizeObserver(resize).observe($("app"));
 resize();
 
 const clock = new THREE.Clock();
@@ -169,6 +189,8 @@ renderer.setAnimationLoop(() => {
 const q = new URLSearchParams(location.search);
 const src = q.get("src");
 if (src) {
+  const opt = [...$<HTMLSelectElement>("source").options].find((o) => o.value === src);
+  if (opt) { $<HTMLSelectElement>("source").value = src; $("seedRow").style.display = "none"; }
   fetch(src).then((r) => r.text()).then((t) => loadJsonText(t, src)).catch((e) => ($("err").textContent = String(e)));
 } else {
   const seed = Number(q.get("seed") ?? 7) | 0;
