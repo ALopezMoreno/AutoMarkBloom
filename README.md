@@ -12,6 +12,7 @@ Markov chain opens the flower.
 | `wasm/` | Browser build of the core (`wasm-pack build wasm --target web`) |
 | `checks/` | Seed determinism tests and the `seed-digests` tool |
 | `viewer/` | TypeScript + three.js viewer and glTF export |
+| `tools/` | Python helpers for inspecting core output |
 | `prototype-python/` | The original 2D Python prototype, kept for reference |
 
 ## Building
