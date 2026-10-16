@@ -6,12 +6,15 @@ import { FlowerMesh } from "./mesh";
 import { stubFlower } from "./stub";
 import { coreAvailable, growBud } from "./core";
 import { download, exportAnimated, exportStatic } from "./export";
+import { drawSchematic, type Section } from "./section";
+import { layerCss } from "./palette";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.localClippingEnabled = true;
 $("app").appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -58,6 +61,11 @@ function show(doc: FlowerDoc, label: string) {
   }
   shells.visible = $<HTMLInputElement>("shells").checked;
   group.add(shells);
+  const peel = $<HTMLInputElement>("peel");
+  peel.max = String(flower.layerCount);
+  peel.value = String(flower.layerCount);
+  $("legendBar").style.background = `linear-gradient(90deg, ${Array.from({ length: 8 }, (_, i) => layerCss(i, 8)).join(", ")})`;
+  applyViews();
   const layers = new Set(doc.petals.map((p) => p.layer)).size;
   $("info").textContent = `${label} · ${doc.petals.length} petals in ${layers} layers · ${doc.frames.length} steps · grid ${doc.grid.nu}×${doc.grid.nv}`;
   $("err").textContent = "";
@@ -89,7 +97,69 @@ function setTime(t: number) {
   const last = Math.max(1, flower.frameCount - 1);
   $<HTMLInputElement>("time").value = String(time / last);
   $("frame").textContent = `step ${Math.round(time)} / ${flower.frameCount - 1}`;
+  updateSection();
 }
+
+// ---- Bud views: colour by layer, exploded, peel, cross-section ----
+
+const clipPlane = new THREE.Plane();
+const clipMaterials: THREE.Material[] = [petalMat, coreMat, shellMat];
+
+function currentSection(): Section | null {
+  const kind = $<HTMLSelectElement>("section").value;
+  if (!flower || kind === "off") return null;
+  const x = Number($<HTMLInputElement>("secPos").value);
+  if (kind === "vertical") return { kind, at: x * Math.PI * 2 };
+  const top = flower.doc.shells.aspect * flower.doc.shells.envelope;
+  return { kind: "horizontal", at: (x * 2 - 1) * top };
+}
+
+function updateSection() {
+  if (!flower) return;
+  const sec = currentSection();
+  $("sectionCtl").hidden = !sec;
+  $("schem").hidden = !sec;
+  const clip = !!sec && $<HTMLInputElement>("clip").checked;
+  for (const m of clipMaterials) {
+    m.clippingPlanes = clip ? [clipPlane] : [];
+    m.needsUpdate = true;
+  }
+  if (!sec) return;
+  const deg = Math.round((sec.at * 180) / Math.PI);
+  $("secPosLabel").textContent = sec.kind === "vertical" ? "Angle" : "Height";
+  $("secPosVal").textContent = sec.kind === "vertical" ? `${deg}°` : `${sec.at.toFixed(2)} core radii`;
+  $("schemTitle").textContent =
+    sec.kind === "vertical" ? `Vertical section through the axis at ${deg}°` : `Horizontal slice at height ${sec.at.toFixed(2)}`;
+  // Three.js keeps the side where normal·p + constant >= 0. Core (x, y, z) maps to three (x, z, -y).
+  if (sec.kind === "vertical") clipPlane.set(new THREE.Vector3(-Math.sin(sec.at), 0, -Math.cos(sec.at)), 0);
+  else clipPlane.set(new THREE.Vector3(0, -1, 0), sec.at);
+  drawSchematic($("schemSvg") as unknown as SVGSVGElement, flower.doc, flower.sample(time), sec, Number($<HTMLInputElement>("peel").value));
+}
+
+function applyViews() {
+  if (!flower) return;
+  const e = Number($<HTMLInputElement>("explode").value);
+  flower.explode = e;
+  $("explodeVal").textContent = e === 0 ? "off" : `${Math.round(e * 100)}%`;
+  const k = Number($<HTMLInputElement>("peel").value);
+  flower.showLayers(k);
+  $("peelVal").textContent = k === flower.layerCount ? `all ${k}` : `inner ${k} of ${flower.layerCount}`;
+  flower.setColorMode($<HTMLSelectElement>("colour").value as "natural" | "layer");
+  flower.setTime(time);
+  updateSection();
+}
+
+for (const id of ["explode", "peel", "secPos"]) $(id).addEventListener("input", applyViews);
+for (const id of ["colour", "clip"]) $(id).addEventListener("change", applyViews);
+$("section").addEventListener("change", () => {
+  // Sensible starting points: a cut facing the default camera, or the bud's equator.
+  $<HTMLInputElement>("secPos").value = $<HTMLSelectElement>("section").value === "vertical" ? "0.11" : "0.5";
+  applyViews();
+});
+$("schemMin").addEventListener("click", () => {
+  const min = $("schem").classList.toggle("min");
+  $("schemMin").textContent = min ? "+" : "–";
+});
 
 const sourceSel = $<HTMLSelectElement>("source");
 if (coreAvailable) {
@@ -186,7 +256,10 @@ addEventListener("drop", async (e) => {
 // The canvas fills #app, which is the whole window on desktop and the space
 // under the control bar on phones.
 const narrow = matchMedia("(max-width: 700px)");
-if (narrow.matches) $<HTMLDetailsElement>("more").open = false;
+if (narrow.matches) {
+  $<HTMLDetailsElement>("more").open = false;
+  $<HTMLDetailsElement>("views").open = false;
+}
 function resize() {
   const el = $("app");
   const w = el.clientWidth || innerWidth, h = el.clientHeight || innerHeight;

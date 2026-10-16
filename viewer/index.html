@@ -34,10 +34,32 @@
   /* Phones: controls become a bar on top and the flower gets the rest of the screen. */
   @media (max-width: 700px) {
     #app { position: relative; inset: auto; flex: 1; min-height: 0; }
-    #panel { position: static; order: -1; width: auto; margin: 0; border-radius: 0; border-width: 0 0 1px; padding: 8px 16px; gap: 6px; backdrop-filter: none; }
+    #panel { max-height: 55dvh; overflow-y: auto; position: static; order: -1; width: auto; margin: 0; border-radius: 0; border-width: 0 0 1px; padding: 8px 16px; gap: 6px; backdrop-filter: none; }
     h1 { display: none; }
     #info { display: none; }
     button, input[type=number], select { padding: 6px 8px; }
+  }
+  .val { text-align: right; color: var(--muted); font-size: 12px; }
+  #schem { position: absolute; right: 12px; bottom: 12px; width: min(380px, calc(100% - 24px)); background: var(--panel); backdrop-filter: blur(8px);
+    border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; z-index: 2; }
+  #schem[hidden] { display: none; }
+  #schem.min svg, #schem.min .legend, #schem.min .note { display: none; }
+  .schemHead { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .schemHead button { padding: 0 8px; flex: 0; }
+  #schemSvg { width: 100%; max-height: 46vh; display: block; }
+  #schemSvg .shell { fill: none; stroke: var(--muted); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; opacity: .7; }
+  #schemSvg .envelope { fill: none; stroke: var(--muted); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+  #schemSvg .core { fill: #e7c25a; fill-opacity: .35; stroke: #c9a23e; stroke-width: 1px; vector-effect: non-scaling-stroke; }
+  #schemSvg .axis { stroke: var(--muted); stroke-width: 1px; stroke-dasharray: 1 4; vector-effect: non-scaling-stroke; }
+  #schemSvg .scale line { stroke: var(--text); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+  #schemSvg .scale text { fill: var(--muted); }
+  .legend { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  #legendBar { flex: 1; height: 8px; border-radius: 4px; }
+  .note { font-size: 11px; color: var(--muted); }
+  @media (max-width: 700px) {
+    #schem { right: 8px; bottom: 8px; width: calc(100% - 16px); padding: 6px 8px; }
+    #schemSvg { max-height: 26dvh; }
+    .note { display: none; }
   }
   button:disabled, input:disabled { opacity: .45; cursor: default; }
   #drop { position: fixed; inset: 0; display: none; place-items: center; background: rgba(178,69,108,.18); font-size: 18px; pointer-events: none; }
@@ -45,7 +67,14 @@
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app">
+  <div id="schem" hidden>
+    <div class="schemHead"><span id="schemTitle"></span><button id="schemMin" title="Hide or show the schematic">–</button></div>
+    <svg id="schemSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="legend"><span>inner</span><span id="legendBar"></span><span>outer</span></div>
+    <div class="note">Dashed: layer shells. Line width is the petal's real thickness.</div>
+  </div>
+</div>
 <div id="panel">
   <h1>AutoMarkBloom</h1>
   <div class="row"><label for="source">Flower</label><select id="source"><option value="core" hidden>Rust core (any seed)</option><option value="stub">Stub (any seed)</option><option value="samples/bud_11.json">Core bud, seed 11</option><option value="samples/bud_2027.json">Core bud, seed 2027</option></select></div>
@@ -55,6 +84,16 @@
     <input id="time" type="range" min="0" max="1" step="0.001" value="0" />
   </div>
   <div class="row"><button id="play" class="primary">Play</button><button id="prev">◀ Step</button><button id="next">Step ▶</button></div>
+  <details id="views" open><summary>Bud views</summary><div class="more">
+  <div class="row"><label for="colour">Colour</label><select id="colour"><option value="natural">Natural</option><option value="layer">By layer</option></select></div>
+  <div><div class="row"><label for="explode">Exploded</label><span class="val" id="explodeVal">off</span></div><input id="explode" type="range" min="0" max="1" step="0.01" value="0" /></div>
+  <div><div class="row"><label for="peel">Layers shown</label><span class="val" id="peelVal"></span></div><input id="peel" type="range" min="1" max="1" step="1" value="1" /></div>
+  <div class="row"><label for="section">Section</label><select id="section"><option value="off">Off</option><option value="vertical">Vertical, through the axis</option><option value="horizontal">Horizontal slice</option></select></div>
+  <div id="sectionCtl" hidden>
+    <div class="row"><label for="secPos" id="secPosLabel">Angle</label><span class="val" id="secPosVal"></span></div><input id="secPos" type="range" min="0" max="1" step="0.002" value="0.5" />
+    <label><input id="clip" type="checkbox" checked /> Cut the 3D model too</label>
+  </div>
+  </div></details>
   <details id="more" open><summary>More options</summary><div class="more">
   <div class="row"><label for="speed">Speed</label><select id="speed"><option value="4">4 steps/s</option><option value="12" selected>12 steps/s</option><option value="24">24 steps/s</option></select></div>
   <div class="row"><label><input id="shells" type="checkbox" /> Shells</label><label><input id="wire" type="checkbox" /> Wireframe</label></div>

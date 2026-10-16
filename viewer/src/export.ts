@@ -5,6 +5,14 @@ import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import type { FlowerMesh } from "./mesh";
 
+/** A copy of the flower's geometry with every layer and its natural colours. */
+function exportGeometry(fm: FlowerMesh) {
+  const geo = fm.geometry.clone();
+  geo.setDrawRange(0, Infinity);
+  geo.setAttribute("color", new THREE.BufferAttribute(fm.naturalColors.slice(), 3));
+  return geo;
+}
+
 function exportMaterial() {
   return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side: THREE.DoubleSide, name: "petal" });
 }
@@ -15,8 +23,8 @@ async function toGlb(scene: THREE.Object3D, animations: THREE.AnimationClip[] = 
 }
 
 export async function exportStatic(fm: FlowerMesh, time: number): Promise<ArrayBuffer> {
-  const geo = fm.geometry.clone();
-  fm.fill(time, geo.getAttribute("position").array as Float32Array);
+  const geo = exportGeometry(fm);
+  fm.fill(time, geo.getAttribute("position").array as Float32Array, 0);
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, exportMaterial());
   mesh.name = fm.mesh.name;
@@ -34,9 +42,9 @@ export async function exportAnimated(fm: FlowerMesh, stepsPerSecond = 12, maxKey
   const last = fm.frameCount - 1;
   const F = Math.max(2, Math.min(fm.frameCount, maxKeys));
   const keyStep = (f: number) => (f * last) / (F - 1);
-  const geo = fm.geometry.clone();
+  const geo = exportGeometry(fm);
   const basePos = geo.getAttribute("position") as THREE.BufferAttribute;
-  fm.fill(0, basePos.array as Float32Array);
+  fm.fill(0, basePos.array as Float32Array, 0);
   geo.computeVertexNormals();
   const morphPos: THREE.BufferAttribute[] = [];
   const morphNrm: THREE.BufferAttribute[] = [];
@@ -44,7 +52,7 @@ export async function exportAnimated(fm: FlowerMesh, stepsPerSecond = 12, maxKey
   scratch.setIndex(geo.getIndex());
   for (let f = 1; f < F; f++) {
     const p = new Float32Array(basePos.array.length);
-    fm.fill(keyStep(f), p);
+    fm.fill(keyStep(f), p, 0);
     const attr = new THREE.BufferAttribute(p, 3);
     scratch.setAttribute("position", attr);
     scratch.computeVertexNormals();
