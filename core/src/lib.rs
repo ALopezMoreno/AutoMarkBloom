@@ -35,6 +35,7 @@ pub mod growth;
 pub mod latents;
 pub mod math;
 pub mod pack;
+pub mod par;
 pub mod rng;
 pub mod sheet;
 pub mod shells;
