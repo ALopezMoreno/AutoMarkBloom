@@ -11,6 +11,13 @@ pub fn bud_json(seed: u64, flower_index: u32) -> String {
     automark_core::grow_bud_json(seed, flower_index as u64)
 }
 
+/// A faster, less settled version of `bud_json` for browsing: same plant,
+/// petal count and layout, slightly different geometry.
+#[wasm_bindgen]
+pub fn bud_preview_json(seed: u64, flower_index: u32) -> String {
+    automark_core::grow_bud_preview_json(seed, flower_index as u64)
+}
+
 /// SHA-256 of `bud_json(seed, 0)`; matches `checks/golden/digests.txt` when the
 /// browser build agrees with native builds.
 #[wasm_bindgen]
