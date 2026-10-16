@@ -13,7 +13,7 @@
 //! A small flower-seeded nudge along the shell normal breaks symmetry at the
 //! start. The base row of every petal is pinned to the receptacle.
 
-use crate::energy::{Candidate, Envelope, Params, Bend, Spring, System, Terms};
+use crate::energy::{Bend, CandidateList, Envelope, Params, Spring, System, Terms};
 use crate::growth::Growth;
 use crate::math;
 use crate::rng::Pcg32;
@@ -161,7 +161,7 @@ struct Relaxer {
     max_step: f64,
     skin: f64,
     reach: f64,
-    cands: Vec<Candidate>,
+    cands: CandidateList,
     anchor: Vec<[f64; 3]>,
     rebuilds: usize,
     iterations: usize,
@@ -212,7 +212,7 @@ impl Relaxer {
             d[b.b] += 4.0 * b.k;
             d[b.c] += b.k;
         }
-        for c in &self.cands {
+        for c in &self.cands.pairs {
             d[c.node] += p.k_contact;
             for v in sys.tris[c.tri] {
                 d[v] += p.k_contact / 3.0;

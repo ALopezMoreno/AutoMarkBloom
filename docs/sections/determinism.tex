@@ -12,11 +12,13 @@ engine, including the browser build. Three rules make that true.
   those differences grow through thousands of relaxation steps. All
   transcendental functions go through the \texttt{libm} crate, a pure-Rust
   implementation that gives the same bits everywhere. Square roots and basic
-  arithmetic are correctly rounded by IEEE~754 on every target.
+  arithmetic are correctly rounded by IEEE~754 on every target, so square
+  roots use the hardware instruction (\texttt{libm}'s own falls back to a slow
+  software routine under WebAssembly).
 \item \textbf{No hidden ordering.} Floating-point addition is not associative,
   so nothing that reaches the output may depend on hash-map iteration order or
-  on threads summing in varying order. The contact search uses a hash map for
-  lookup only and sorts its result (\cref{sec:packing}).
+  on threads summing in varying order. The contact search sorts its result,
+  so its spatial grid only affects speed (\cref{sec:packing}).
 \end{enumerate}
 
 \subsection{How it is checked}

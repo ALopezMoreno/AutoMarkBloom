@@ -39,6 +39,21 @@ default and still more relaxed than it was.
 Any change to canonical output needs the golden digests re-blessed
 (`BLESS=1 cargo test --release -p automark-checks`).
 
+## Contact pruning and wasm sqrt (output unchanged)
+
+Seed 11's bud spent about two thirds of each energy evaluation on contact pairs that weren't
+touching: of about 250k candidates per evaluation only about 2.4k (1%) were in contact.
+Each candidate now keeps its distance from when the list was built, and skips the
+closest-point test while that distance, less how far its point and triangle have moved,
+still can't reach `dmin`. The candidate search also bins nodes into a flat grid
+instead of a hash map. Wasm now uses the hardware `sqrt`, which is correctly rounded, so
+the bits are the same. Golden digests are unchanged on native and wasm.
+
+| Seed 11 bud | before | after |
+|---|---|---|
+| native | 15.1 s | 8.5 s |
+| wasm (Node) | 28.8 s | 11.8 s |
+
 ## Opening (stage 2)
 
 Seed 11 flower 0, 24 frames, measured natively:
