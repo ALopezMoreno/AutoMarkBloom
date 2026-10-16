@@ -1,12 +1,13 @@
 # automark-core
 
-Rust core for Automark Bloom. Stage 1 (bud formation and development) is built; opening is next.
+Rust core for Automark Bloom. Stage 1 (bud formation and development) and stage 2 (opening) are built.
 
 ```
 cargo run --release -- --seed 11 --json bud.json            # peony preset, flower 0
 cargo run --release -- --seed 11 --flower 3 --json bud.json # a sibling on the same plant
 cargo run --release -- --seed 11 --json bud.json --species dahlia.json
 cargo run --release -- --seed 11 --json bud.json --frames      # include the bud's growth stages
+cargo run --release -- --seed 11 --json flower.json --frames --open 24  # bud stages, then 24 opening frames
 cargo test --release
 ```
 
@@ -14,6 +15,7 @@ Library entry points:
 - `grow_bud(PlantSeed, flower_index, &Species, &PackSettings) -> Bud`: traits per plant; bud automaton, growth, packing and latents per flower.
 - `export::flower_json(&Bud) -> String`: the shared flower JSON (`viewer/FORMAT.md`), canonical and byte-identical across platforms.
 - `grow_bud_json(seed: u64, flower_index: u64) -> String`: peony preset with default settings, for wasm and seed tests.
+- `bloom::open_flower(&Bud, &BloomSettings) -> Opening` and `bloom::export::flower_json(&Bud, &Opening)`: the opening, appended to the bud's JSON as frames with `stage: "open"` and t in (0, 1].
 
 How a bud is grown (`src/lib.rs` has the overview):
 1. `traits`/`species`: the plant seed draws one value from each range in a `Species` (only place species numbers live).
@@ -25,3 +27,9 @@ How a bud is grown (`src/lib.rs` has the overview):
 Determinism: one specified PRNG (`rng`), all transcendental math through libm (`math`), no hash-order or threaded sums.
 
 Latents for the opening stage are named channels (`channels`, `latents`): petal scope `target_length`, `target_width`, `edge_growth`, `cup`, `base_fold`, `onset`, `bud_growth`, `petal_type` (labelled), `twist`; flower scope `vigour`, `sepal_radius`. Each channel draws from its own sub-stream keyed by its name, so adding one never shifts the others.
+
+How a flower opens (`src/bloom/mod.rs` has the overview). Opening is a Markov chain over the whole flower, seeded per flower:
+1. `bloom::channels`: every latent is a named channel (flower, petal or point scope; 1 or 3 numbers). Each follows one rule: fixed, mean-reverting drift, or growth toward `gain * target + bias` along a smoothstep window starting at its onset (monotone for sizes). Rule parameters are constants or other channels' names, so channels are wired together by data. Each (channel, petal) has its own random stream keyed by the channel's name. Channels the bud hands over with no rule are carried as fixed and exported.
+2. `bloom::program`: the default wiring (data, not code): a drifting per-petal `rate` around the flower's `vigour`; `length`, `width`, `edge`, `cupping`, `reflex`, `asymmetry`, `memory`, `wrap` and `ruffle` grow from the bud's latents on each petal's own clock (`onset`, outer layers first).
+3. `bloom::consume`: the only code that knows what channels mean. It turns them into a pose per petal: the bud petal's centre curve is re-integrated with its curl scaled by `memory` and folded back at the base by `reflex`, rows are widened, flattened (`wrap`) and cupped, and the bud's crumples are re-applied in the new frame; margins get extra rest length (`edge`) so they ruffle, and thickness thins with area.
+4. `bloom::relax` + `bloom::contact`: each step moves the petals with their poses, then FIRE relaxes springs, bending, a soft pull to the pose, contact on densely sampled petals, and the stamen core. Exact gradient, checked by a finite-difference test.
