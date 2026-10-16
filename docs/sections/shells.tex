@@ -22,9 +22,19 @@ aspect $\alpha$ along $z$, reshaped by the factor
 The egg term $\eta_e$ broadens the lower body and narrows the top ($c = 1$ is the
 top pole); the point term $\eta_p$ draws the top out into a pointed tip, as in a
 rose bud. Both are species traits drawn per plant, which gives the
-plain spheroid when both are 0. Since the core is a shell too, it takes the same outline, which
-is why $|e|$ is kept to about $0.12$. With $\mathbf u = \mathbf q/|\mathbf q|$,
-the gradient used for shell normals and by the packing energy is
+plain spheroid when both are 0. Since the core is a shell too, it takes the
+same outline; beyond about $|\eta_e| = 0.12$ the core turns visibly
+triangular, and peony stays within $0 \le \eta_e \le 0.08$. An $\eta_p$ of about
+0.3 gives a clearly pointed, rose-like bud; peony draws $0 \le \eta_p \le 0.1$.
+The derivative of the shape factor is
+\[
+  g'(c) = \tfrac12\eta_e\,(15c^2 - 3) + \begin{cases} 8\eta_p\,c^7 & c > 0,\\ 0 & c \le 0,\end{cases}
+\]
+and $c^8$ is computed as $(c^2)^2(c^2)^2$ so that every platform rounds it the
+same way (\cref{sec:determinism}). At the centre itself, $|\mathbf q| <
+10^{-12}$, the scaled radius is taken as $|\mathbf q|$. With
+$\mathbf u = \mathbf q/|\mathbf q|$, the gradient used for shell normals and by
+the packing energy is
 \[
   \frac{\partial\rt}{\partial\mathbf q} = \frac{\mathbf u}{g} - \frac{g'(c)}{g^2}\,\bigl(\mathbf e_z - c\,\mathbf u\bigr),
 \]
@@ -33,9 +43,9 @@ with the $z$ component divided by $\alpha$ to give $\nabla\rt(\x)$.
 \subsection{Slots}
 Each layer owns a slot of width
 \[
-  w = \tmax\,(1 + c),
+  w = \tmax\,(1 + \varrho),
 \]
-the thickest a petal can be plus some initial room. Slots stack outward from the
+the thickest a petal can be plus some initial room ($\varrho$ is \texttt{crumple\_room}). Slots stack outward from the
 core, so layer $k = 0,\dots,L-1$ has its mid-surface at
 \[
   a_k = R_0 + w\,(k + \tfrac12),
@@ -67,7 +77,8 @@ and the inner side of the sepal envelope starts at $R_{\mathrm{env}} = R_0 + wL$
   \draw[gray] (0,-0.55) arc[start angle=-90, end angle=-90+\pb, radius=0.55];
   \node[font=\scriptsize] at (0.22,-0.75) {$\phi_b$};
 \end{tikzpicture}
-\caption{Three layers in their slots, seen in cross-section. Petals attach on
+\caption{Three layers in their slots, seen in cross-section (schematic: a
+plain spheroid with $\eta_e=\eta_p=0$ and $s_c=1$). Petals attach on
 the ring at polar angle $\phi_b$ from the bottom pole and stop $\phi_g$ short of
 the top pole.}
 \label{fig:shells}

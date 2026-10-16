@@ -18,9 +18,10 @@ Randomness enters at three tiers, detailed in \cref{sec:tiers}.
   grows; and a smooth energy packs the growing, thick petals into a bud that
   swells against its sepals. Flowers on one plant share a cultivar but are not
   clones.
-\item \textbf{Flowering} (in progress) will open the bud with a per-flower Markov
-  chain that drives growth, starting from the latent quantities the bud hands
-  over.
+\item \textbf{Flowering} opens the bud with a per-flower Markov chain over
+  named channels, starting from the latent quantities the bud hands over:
+  each petal grows, splays and uncurls toward a pose, and a relaxation keeps
+  the petals from passing through each other.
 \item \textbf{Colour} (future) places each petal or petal region on the
   parameter axis of the logistic map. Petals in a stable regime look the same
   in every flower; petals near a bifurcation amplify small differences.
