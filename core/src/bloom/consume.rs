@@ -65,6 +65,11 @@ pub struct Petal {
     theta_c: Vec<f64>,
     /// Packed minus laid, per node, in the laid local frame (normal, across, along).
     crumple: Vec<[f64; 3]>,
+    /// Normal orientation of the laid sheet (see `sign_of`). The pose keeps
+    /// the grid's handedness, so the same sign holds for every pose; working
+    /// it out again per pose flips it when a petal lies near horizontal and
+    /// throws the crumples to the other side.
+    sign: f64,
 }
 
 fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
@@ -119,6 +124,9 @@ fn sign_of(x: &[[f64; 3]], nu: usize, nv: usize) -> f64 {
     }
 }
 
+/// Largest angle half a row may span round the axis by widening.
+const MAX_HALF_WRAP: f64 = std::f64::consts::FRAC_PI_2;
+
 fn ramp(x: f64, w: f64) -> f64 {
     (x / w).clamp(0.0, 1.0)
 }
@@ -156,14 +164,15 @@ impl Petal {
         let z = (0..nv).map(|v| at(v)[2]).collect();
         let theta_c: Vec<f64> = (0..nv).map(|v| math::atan2(at(v)[1], at(v)[0])).collect();
         let dtheta = (0..nu * nv).map(|i| wrap_pi(math::atan2(laid[i][1], laid[i][0]) - theta_c[i / nu])).collect();
-        let fr = frames(laid, nu, nv, sign_of(laid, nu, nv));
+        let sign = sign_of(laid, nu, nv);
+        let fr = frames(laid, nu, nv, sign);
         let crumple = (0..nu * nv)
             .map(|i| {
                 let d = sub(x[i], laid[i]);
                 [dot(d, fr[i][0]), dot(d, fr[i][1]), dot(d, fr[i][2])]
             })
             .collect();
-        Petal { nu, nv, springs, thick0: thick.to_vec(), rho, z, dtheta, theta_c, crumple }
+        Petal { nu, nv, springs, thick0: thick.to_vec(), rho, z, dtheta, theta_c, crumple, sign }
     }
 
     pub fn coords(&self, i: usize) -> (f64, f64) {
@@ -225,8 +234,13 @@ impl Petal {
         let mut pose = Vec::with_capacity(nu * nv);
         for v in 0..nv {
             let (tc, r) = (self.theta_c[v], rho[v].max(1e-6));
-            let wv = wid_at(fv(v));
-            let half = (0..nu).map(|u| (self.dtheta[v * nu + u] * self.rho[v]).abs()).fold(0.0, f64::max).max(1e-9) * wv;
+            let half0 = (0..nu).map(|u| (self.dtheta[v * nu + u] * self.rho[v]).abs()).fold(0.0, f64::max).max(1e-9);
+            // A row widens until it spans a half turn round the axis (or
+            // keeps its bud width if already wider): a petal that wraps far
+            // round a small core would otherwise spiral through its
+            // neighbours as it widens.
+            let wv = wid_at(fv(v)).min((MAX_HALF_WRAP * r / half0).max(1.0));
+            let half = half0 * wv;
             let (ct, st) = (math::cos(tc), math::sin(tc));
             // Cupping: total turning `cup` across the row, toward the axis.
             let k = cup * ramp(fv(v), 0.2) / (2.0 * half);
@@ -245,7 +259,7 @@ impl Petal {
         }
 
         // 3. Crumples in the new local frame.
-        let fr = frames(&pose, nu, nv, sign_of(&pose, nu, nv));
+        let fr = frames(&pose, nu, nv, self.sign);
         for (i, q) in pose.iter_mut().enumerate() {
             let d = self.crumple[i];
             for c in 0..3 {
