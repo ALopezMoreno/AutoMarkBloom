@@ -221,13 +221,23 @@ petals. Instead a list of candidate (point, triangle) pairs closer than
 \[
   \text{reach} = \tmax + \text{skin}, \qquad \text{skin} = 2\tmax,
 \]
-is built with a spatial hash, and reused until some point has moved more than
+is built with a uniform grid, and reused until some point has moved more than
 half the skin since the list was built; it is also rebuilt at the start of
 every stage. Contacts only matter below $d_{\min}\le\tmax$, and a point and a
 triangle that each moved less than half the skin cannot have closed more than
-one skin, so no contact is missed between rebuilds. The hash is used only for
-lookup; the list is sorted before use, so results never depend on hash order
-(\cref{sec:determinism}).
+one skin, so no contact is missed between rebuilds. The grid only decides
+which pairs get the exact distance test; the list is sorted before use, so
+results never depend on it (\cref{sec:determinism}).
+
+Most candidates are not touching: in a packed bud only about 1\% are. Each
+pair keeps its distance $d_0$ from when the list was built. Point-triangle
+distance changes by at most how far the point and the triangle's corners have
+moved, so if
+\[
+  d_0 - |\Delta\x_{\text{point}}| - \max_{\text{corners}} |\Delta\x| \ge d_{\min},
+\]
+the pair cannot be in contact and is skipped without the closest-point test.
+This only skips pairs that the test would discard, so the result is unchanged.
 
 \subsection{What development reports}
 The core reports the energy terms before and after, the number of stages,
