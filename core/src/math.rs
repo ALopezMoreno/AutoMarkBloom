@@ -10,3 +10,4 @@ pub fn pow(x: f64, y: f64) -> f64 { libm::pow(x, y) }
 pub fn atan2(y: f64, x: f64) -> f64 { libm::atan2(y, x) }
 pub fn floor(x: f64) -> f64 { libm::floor(x) }
 pub fn round(x: f64) -> f64 { libm::round(x) }
+pub fn erf(x: f64) -> f64 { libm::erf(x) }

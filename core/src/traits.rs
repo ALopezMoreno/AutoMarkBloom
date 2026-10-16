@@ -70,6 +70,9 @@ pub struct PlantTraits {
     pub layer_freedom: f64,
     pub sepal_stiffness: f64,
     pub sepal_growth: f64,
+    pub growth_correlation: f64,
+    pub growth_persistence: f64,
+    pub growth_anisotropy: f64,
     pub size_potential: f64,
     pub cup_inner: f64,
     pub cup_outer: f64,
@@ -149,6 +152,10 @@ impl PlantTraits {
         let onset_spread = f(s.onset_spread);
         let latent_noise = f(s.latent_noise);
         let growth_stages = int_in(r, s.growth_stages);
+        // Drawn last so adding them left every earlier trait unchanged.
+        let growth_correlation = r.range(s.growth_correlation[0], s.growth_correlation[1]);
+        let growth_persistence = r.range(s.growth_persistence[0], s.growth_persistence[1]);
+        let growth_anisotropy = r.range(s.growth_anisotropy[0], s.growth_anisotropy[1]);
         PlantTraits {
             layers,
             aspect,
@@ -175,6 +182,9 @@ impl PlantTraits {
             layer_freedom,
             sepal_stiffness,
             sepal_growth,
+            growth_correlation,
+            growth_persistence,
+            growth_anisotropy,
             size_potential,
             cup_inner,
             cup_outer,
