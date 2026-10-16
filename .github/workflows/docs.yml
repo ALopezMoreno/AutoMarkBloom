@@ -19,10 +19,15 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends \
-            latexmk lmodern texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended
-      - name: Build PDF
-        run: make -C docs
+            latexmk lmodern texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended \
+            pandoc poppler-utils
+      - name: Build PDF and web page
+        run: |
+          make -C docs
+          make -C docs html
       - uses: actions/upload-artifact@v4
         with:
           name: automark-docs
-          path: docs/automark.pdf
+          path: |
+            docs/automark.pdf
+            docs/build/automark.html

@@ -1,0 +1,120 @@
+<title>AutoMarkBloom Model Notes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Instrument+Sans:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column for a technical notebook; sticky bar with the contents, status chips mark how real each stage is. */
+:root {
+  --paper: #f5f7f3;
+  --ink: #1c2420;
+  --muted: #5b6862;
+  --rule: #d8dfd9;
+  --panel: #ebf0eb;
+  --peony: #a8325f;
+  --built: #2e6b3f; --built-bg: #e0efe3;
+  --rework: #9a4a0c; --rework-bg: #f7e6d6;
+  --planned: #2a5591; --planned-bg: #e0e9f5;
+  --font-display: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Literata", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #131816; --ink: #e3e9e5; --muted: #9aa8a1; --rule: #2b3531; --panel: #1b2220;
+  --peony: #ec84ad;
+  --built: #8fd3a0; --built-bg: #1d3325; --rework: #f0b27e; --rework-bg: #3a2817; --planned: #9dbcf0; --planned-bg: #1c2a40;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #131816; --ink: #e3e9e5; --muted: #9aa8a1; --rule: #2b3531; --panel: #1b2220;
+  --peony: #ec84ad;
+  --built: #8fd3a0; --built-bg: #1d3325; --rework: #f0b27e; --rework-bg: #3a2817; --planned: #9dbcf0; --planned-bg: #1c2a40;
+  color-scheme: dark; }
+
+html { scroll-padding-top: calc(64px + env(safe-area-inset-top, 0px)); }
+body { background: var(--paper); color: var(--ink); font: 17px/1.62 var(--font-body); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule);
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-inner { max-width: 44rem; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { font: 700 15px/1.2 var(--font-display); letter-spacing: 0.01em; }
+.brand span { color: var(--peony); }
+details.toc { position: relative; }
+details.toc summary { cursor: pointer; list-style: none; font: 600 14px var(--font-display); padding: 6px 12px; border: 1px solid var(--rule); border-radius: 999px; }
+details.toc summary::-webkit-details-marker { display: none; }
+details.toc summary:focus-visible, a:focus-visible { outline: 2px solid var(--peony); outline-offset: 2px; }
+details.toc ol { position: absolute; right: 0; top: calc(100% + 8px); width: min(20rem, calc(100vw - 32px)); max-height: 70vh; overflow: auto;
+  margin: 0; padding: 8px; list-style: none; background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 10px 30px rgb(0 0 0 / 0.18); }
+details.toc li a { display: flex; gap: 10px; padding: 7px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; font: 500 15px/1.3 var(--font-display); }
+details.toc li a:hover { background: var(--panel); }
+.num { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.4em; }
+
+main { max-width: 44rem; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.doc { display: grid; gap: 10px; margin-bottom: 8px; }
+.eyebrow { font: 600 12px var(--font-display); letter-spacing: 0.09em; text-transform: uppercase; color: var(--peony); }
+h1.title { font: 700 clamp(30px, 7vw, 42px)/1.08 var(--font-display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.synced { font: 400 13px var(--font-mono); color: var(--muted); }
+header.doc + p { font-size: 18px; color: var(--ink); border-left: 3px solid var(--peony); padding-left: 14px; margin-top: 20px; }
+
+main { counter-reset: sec; }
+section.level1 > h1 { font: 700 26px/1.2 var(--font-display); margin: 52px 0 12px; text-wrap: balance; padding-top: 16px; border-top: 1px solid var(--rule); }
+section.level1:not(.unnumbered) > h1::before { counter-increment: sec; content: counter(sec); color: var(--peony); margin-right: 12px; font-variant-numeric: tabular-nums; }
+h2 { font: 600 20px/1.25 var(--font-display); margin: 34px 0 8px; text-wrap: balance; }
+h3, h4 { font: 600 17px/1.3 var(--font-display); margin: 24px 0 6px; }
+p { margin: 0 0 14px; }
+a { color: var(--peony); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+code { font: 0.84em var(--font-mono); background: var(--panel); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+ul, ol { padding-left: 1.3em; margin: 0 0 14px; }
+li { margin-bottom: 6px; }
+em { font-style: italic; }
+strong { font-weight: 600; }
+
+.stage { display: grid; gap: 4px; font: 400 14px/1.45 var(--font-display); background: var(--panel); border-radius: 8px; padding: 10px 14px; margin: 4px 0 18px; }
+.stage .k { display: inline-block; min-width: 4.6em; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.stage code { background: transparent; padding: 0; }
+.chip { display: inline-block; font: 600 12px/1 var(--font-display); padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.chip-built { color: var(--built); background: var(--built-bg); }
+.chip-rework { color: var(--rework); background: var(--rework-bg); }
+.chip-planned, .chip-paused { color: var(--planned); background: var(--planned-bg); }
+
+.tablewrap { overflow-x: auto; margin: 6px 0 18px; }
+table { border-collapse: collapse; width: 100%; font: 400 14.5px/1.4 var(--font-display); }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--ink); padding: 6px 10px 6px 0; }
+td { border-bottom: 1px solid var(--rule); padding: 8px 10px 8px 0; vertical-align: top; }
+td code { white-space: nowrap; }
+.center { margin: 0; }
+
+mjx-container[display="true"] { display: block; overflow-x: auto; overflow-y: hidden; padding: 4px 0; margin: 10px 0 !important; }
+mjx-container { color: var(--ink); }
+
+figure { margin: 22px 0; }
+.figpanel { background: #ffffff; border: 1px solid var(--rule); border-radius: 10px; padding: 14px; display: flex; justify-content: center; overflow-x: auto; }
+.figpanel img { max-width: 100%; height: auto; max-height: 420px; }
+figcaption { font: 400 14px/1.45 var(--font-display); color: var(--muted); margin-top: 8px; }
+
+.remark { font-style: italic; }
+footer { margin-top: 48px; font: 400 13px var(--font-display); color: var(--muted); border-top: 1px solid var(--rule); padding-top: 14px; }
+@media (max-width: 480px) { body { font-size: 16px; } section.level1 > h1 { font-size: 22px; } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+<script>
+window.MathJax = { tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] }, svg: { fontCache: "global" } };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js" defer></script>
+
+<div class="bar"><div class="bar-inner">
+  <div class="brand">Auto<span>Mark</span>Bloom</div>
+  <details class="toc"><summary>Contents</summary><ol>{{TOC}}</ol></details>
+</div></div>
+<main>
+<header class="doc">
+  <div class="eyebrow">Model notes</div>
+  <h1 class="title">How the model grows a flower</h1>
+  <div class="synced">Code checked at commit {{COMMIT}} · {{DATE}}</div>
+</header>
+{{BODY}}
+<footer>Generated from <code>docs/automark.tex</code> in the AutoMarkBloom repository. The LaTeX source is the reference copy.</footer>
+</main>
+<script>
+document.querySelectorAll('details.toc a').forEach(a => a.addEventListener('click', () => a.closest('details').open = false));
+</script>
