@@ -8,6 +8,7 @@ import { coreAvailable, growBud } from "./core";
 import { download, exportAnimated, exportStatic } from "./export";
 import { drawSchematic, type Section } from "./section";
 import { layerCss } from "./palette";
+import { PlantParts } from "./plant";
 import { categoryCss, rampCss } from "./channels";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -41,9 +42,12 @@ const schematicMat = new THREE.MeshStandardMaterial({
   vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, transparent: true, opacity: 0.22, depthWrite: false,
 });
 const rimMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
+const stemMat = new THREE.MeshStandardMaterial({ color: "#56853d", roughness: 0.7 });
+const sepalMat = new THREE.MeshStandardMaterial({ color: "#4a7a36", roughness: 0.6, side: THREE.DoubleSide });
+let plant: PlantParts | null = null;
 const coreMat = new THREE.MeshStandardMaterial({ color: "#e7c25a", roughness: 0.8 });
 const shellMat = new THREE.MeshBasicMaterial({ color: "#b2456c", wireframe: true, transparent: true, opacity: 0.12 });
-const sepalMat = new THREE.MeshBasicMaterial({ color: "#3f7d4f", wireframe: true, transparent: true, opacity: 0.25 });
+const envelopeMat = new THREE.MeshBasicMaterial({ color: "#3f7d4f", wireframe: true, transparent: true, opacity: 0.25 });
 
 let flower: FlowerMesh | null = null;
 const group = new THREE.Group();
@@ -68,11 +72,15 @@ function show(doc: FlowerDoc, label: string) {
     shells.add(s);
   }
   // Sepal envelope: resized with the bud as it swells (see updateEnvelope).
-  const env = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), sepalMat);
+  const env = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), envelopeMat);
   env.name = "sepals";
   shells.add(env);
   shells.visible = $<HTMLInputElement>("shells").checked;
   group.add(shells);
+  plant?.dispose();
+  plant = new PlantParts(aspect, core, `${doc.seed}/${doc.flower_index ?? 0}`, { stem: stemMat, sepal: sepalMat });
+  plant.group.visible = $<HTMLInputElement>("plantParts").checked;
+  group.add(plant.group);
   // Colour menu: natural, by layer, then every declared channel.
   const sel = $<HTMLSelectElement>("colour");
   const keep = sel.value;
@@ -130,7 +138,7 @@ function setTime(t: number) {
 // ---- Bud views: colour by layer, exploded, peel, cross-section ----
 
 const clipPlane = new THREE.Plane();
-const clipMaterials: THREE.Material[] = [petalMat, schematicMat, rimMat, coreMat, shellMat, sepalMat];
+const clipMaterials: THREE.Material[] = [petalMat, schematicMat, rimMat, coreMat, shellMat, envelopeMat, stemMat, sepalMat];
 
 function currentSection(): Section | null {
   const kind = $<HTMLSelectElement>("section").value;
@@ -168,6 +176,15 @@ function updateEnvelope() {
   if (!flower || !env) return;
   const r = flower.envelope(time);
   env.scale.set(r, r * flower.doc.shells.aspect, r);
+  // Sepals peel back over the first part of the opening.
+  const t = flower.doc.frames[Math.round(time)]?.t ?? 0;
+  const open = Math.min(1, Math.max(0, t / 0.4));
+  // Sepals wrap whatever the petals reach, which can be a little past the nominal envelope;
+  // they stay at the closed bud's size once the flower starts opening.
+  const firstOpen = flower.doc.frames.findIndex((f) => f.t > 0);
+  const closedAt = firstOpen > 0 ? Math.min(time, firstOpen - 1) : time;
+  const wrap = Math.max(r, flower.outerRadius(closedAt) * 0.99);
+  plant?.update(wrap, open * open * (3 - 2 * open), flower.explode);
 }
 
 /** Legend under the colour menu: ramp with its range, or category swatches. */
@@ -194,6 +211,7 @@ function applyViews() {
   $("explodeVal").textContent = e === 0 ? "off" : `${Math.round(e * 100)}%`;
   const k = Number($<HTMLInputElement>("peel").value);
   flower.showLayers(k);
+  plant?.setSepalsVisible(k === flower.layerCount);
   $("peelVal").textContent = k === flower.layerCount ? `all ${k}` : `inner ${k} of ${flower.layerCount}`;
   const mode = $<HTMLSelectElement>("colour").value;
   flower.setColorMode(mode, time);
@@ -202,6 +220,7 @@ function applyViews() {
   flower.rims.visible = schematic;
   colourLegend(mode);
   flower.setTime(time);
+  updateEnvelope();
   updateSection();
 }
 
@@ -318,6 +337,9 @@ $("next").addEventListener("click", () => setTime(Math.floor(time) + 1));
 $("shells").addEventListener("change", (e) => {
   const s = group.getObjectByName("shells");
   if (s) s.visible = (e.target as HTMLInputElement).checked;
+});
+$("plantParts").addEventListener("change", (e) => {
+  if (plant) plant.group.visible = (e.target as HTMLInputElement).checked;
 });
 $("wire").addEventListener("change", (e) => (petalMat.wireframe = schematicMat.wireframe = (e.target as HTMLInputElement).checked));
 $("glbStatic").addEventListener("click", async () => {

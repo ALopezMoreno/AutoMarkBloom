@@ -156,6 +156,20 @@ export class FlowerMesh {
     return (r[r.length - 1] ?? sh.core) + slot / 2;
   }
 
+  /** Largest scaled radius reached by any petal surface at `time` (outer face included). */
+  outerRadius(time: number): number {
+    const a = this.doc.shells.aspect;
+    let best = 0;
+    for (const { mid, thick } of this.sample(time)) {
+      for (let j = 0; j < thick.length; j++) {
+        const x = mid[3 * j], y = mid[3 * j + 1], z = mid[3 * j + 2] / a;
+        const r = Math.sqrt(x * x + y * y + z * z) + thick[j] / 2;
+        if (r > best) best = r;
+      }
+    }
+    return best;
+  }
+
   /** "step k: bud t=-0.50" style label for a frame. */
   frameLabel(time: number): string {
     const f = this.doc.frames[Math.round(Math.min(this.frameCount - 1, Math.max(0, time)))];
