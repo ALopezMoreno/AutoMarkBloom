@@ -34,7 +34,7 @@ pub struct PackSettings {
 
 impl Default for PackSettings {
     fn default() -> Self {
-        PackSettings { relax_iterations: 250, settle_iterations: 600, dt_max: 0.03, record_frames: false }
+        PackSettings { relax_iterations: 60, settle_iterations: 150, dt_max: 0.3, record_frames: false }
     }
 }
 
@@ -44,12 +44,12 @@ impl PackSettings {
         PackSettings { relax_iterations: 15, settle_iterations: 15, ..Self::default() }
     }
 
-    /// About six times faster than the default, for browsing buds
+    /// About two and a half times faster than the default, for browsing buds
     /// interactively. Same plant, flower traits, petal layout and growth
     /// automaton draws, but the packing is less settled, so the geometry
     /// (and channels derived from it) differs slightly from the canonical bud.
     pub fn preview() -> Self {
-        PackSettings { relax_iterations: 40, settle_iterations: 80, ..Self::default() }
+        PackSettings { relax_iterations: 25, settle_iterations: 50, ..Self::default() }
     }
 }
 
@@ -178,37 +178,87 @@ impl Relaxer {
         }
     }
 
+    /// Per-node masses for preconditioned FIRE: each node's local stiffness
+    /// (incident springs, plus contact, envelope and band stiffness wherever
+    /// those penalties are within reach), relative to a free node's.
+    /// Stiff nodes then take small steps and soft ones large steps, so the
+    /// time step is no longer set by the stiffest node in the bud.
+    fn masses(&self, sys: &System, x: &[[f64; 3]], env: &Envelope) -> (Vec<f64>, f64) {
+        const FREE: f64 = 200.0;
+        let p = sys.params;
+        let mut d = vec![0.0; x.len()];
+        for s in &sys.springs {
+            d[s.a] += s.k;
+            d[s.b] += s.k;
+        }
+        for c in &self.cands {
+            d[c.node] += p.k_contact;
+            for v in sys.tris[c.tri] {
+                d[v] += p.k_contact / 3.0;
+            }
+        }
+        let mut denv = p.k_sepal;
+        for (i, &xi) in x.iter().enumerate() {
+            let r = sys.shells.scaled_radius(xi);
+            let half = 0.5 * sys.thick[i];
+            if r > env.r - half - self.reach {
+                d[i] += p.k_env;
+                denv += p.k_env;
+            }
+            if r < sys.shells.core + half + self.reach {
+                d[i] += p.k_env;
+            }
+            if sys.band_excess(i, xi, env.r).0 > -self.reach {
+                d[i] += p.k_band;
+                let w = sys.layer_weight(sys.layer[i]);
+                denv += p.k_band * w * w;
+            }
+        }
+        let sqrt_m = d.iter().map(|v| math::sqrt((v / FREE).max(1e-3))).collect();
+        (sqrt_m, math::sqrt((denv / FREE).max(1e-3)))
+    }
+
+    /// FIRE in mass-scaled coordinates y = sqrt(m) x: the force on y is
+    /// -grad / sqrt(m) and a step in y moves x by step / sqrt(m).
     fn run(&mut self, sys: &System, x: &mut [[f64; 3]], env: &mut Envelope, pinned: &[bool], iters: usize, dt_max: f64) {
         let n = x.len();
         let mut grad = vec![[0.0; 3]; n];
         let mut genv = 0.0;
         let mut vel = vec![[0.0f64; 3]; n];
         let mut venv = 0.0;
+        let (mut sm, mut sme) = self.masses(sys, x, env);
+        let mut built = self.rebuilds;
         let (mut dt, mut alpha, mut npos) = (dt_max * 0.5, 0.1, 0usize);
         for _ in 0..iters {
             self.refresh(sys, x, false);
+            if self.rebuilds != built {
+                (sm, sme) = self.masses(sys, x, env);
+                built = self.rebuilds;
+            }
             sys.energy(x, *env, &self.cands, &mut grad, &mut genv);
             for i in 0..n {
                 if pinned[i] {
                     grad[i] = [0.0; 3];
                 }
             }
-            let (mut pw, mut vn, mut fnn) = (-genv * venv, venv * venv, genv * genv);
+            let fe = -genv / sme;
+            let (mut pw, mut vn, mut fnn) = (fe * venv, venv * venv, fe * fe);
             for i in 0..n {
                 for c in 0..3 {
-                    pw -= grad[i][c] * vel[i][c];
+                    let f = -grad[i][c] / sm[i];
+                    pw += f * vel[i][c];
                     vn += vel[i][c] * vel[i][c];
-                    fnn += grad[i][c] * grad[i][c];
+                    fnn += f * f;
                 }
             }
             if pw > 0.0 {
                 let (vn, fnn) = (math::sqrt(vn), math::sqrt(fnn).max(1e-12));
                 for i in 0..n {
                     for c in 0..3 {
-                        vel[i][c] = (1.0 - alpha) * vel[i][c] - alpha * vn * grad[i][c] / fnn;
+                        vel[i][c] = (1.0 - alpha) * vel[i][c] - alpha * vn * grad[i][c] / (sm[i] * fnn);
                     }
                 }
-                venv = (1.0 - alpha) * venv - alpha * vn * genv / fnn;
+                venv = (1.0 - alpha) * venv + alpha * vn * fe / fnn;
                 npos += 1;
                 if npos > 5 {
                     dt = (dt * 1.1).min(dt_max);
@@ -227,8 +277,8 @@ impl Relaxer {
                 }
                 let mut step = [0.0; 3];
                 for c in 0..3 {
-                    vel[i][c] -= dt * grad[i][c];
-                    step[c] = dt * vel[i][c];
+                    vel[i][c] -= dt * grad[i][c] / sm[i];
+                    step[c] = dt * vel[i][c] / sm[i];
                 }
                 let l = math::sqrt(step[0] * step[0] + step[1] * step[1] + step[2] * step[2]);
                 let s = if l > self.max_step { self.max_step / l } else { 1.0 };
@@ -236,8 +286,8 @@ impl Relaxer {
                     x[i][c] += s * step[c];
                 }
             }
-            venv -= dt * genv;
-            env.r += (dt * venv).clamp(-self.max_step, self.max_step);
+            venv += dt * fe;
+            env.r += (dt * venv / sme).clamp(-self.max_step, self.max_step);
             self.iterations += 1;
         }
     }

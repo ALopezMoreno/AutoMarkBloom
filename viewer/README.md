@@ -10,7 +10,12 @@ TypeScript + three.js page to orbit a bud, play its opening step by step, and ex
 - `?seed=N&t=0.5` opens the stub at a seed and opening fraction.
 - `node checks/live.mjs <out-dir>` grows three seeds with the wasm core and screenshots them; `node checks/phone.mjs <out-dir>` screenshots the phone and desktop layouts.
 - `node checks/views.mjs <out-dir>` screenshots each bud view on a sample bud.
+- `node checks/opening.mjs <out-dir>` (after `npm run build`) plays the bundled seed 11 bud-to-open sample and screenshots five steps.
 - `npm run check -- <out-dir>` renders seeds 7 and 42 at three opening points in headless Chromium and round-trips the animated .glb.
 
 Data format: [FORMAT.md](FORMAT.md). Code: `format.ts` (types and validation), `mesh.ts` (thick petals from mid-surface + thickness),
 `export.ts` (static .glb, and animated .glb as morph targets with an "opening" clip, resampled to at most 24 keys), `main.ts` (UI).
+
+## Bud-to-open sample
+
+The wasm build does not expose the opening stage yet, so `public/samples/flower_11_0.json` is a precomputed native run (`automark --seed 11 --flower 0 --frames --open 12 --json out.json`). The raw export is about 54 MB, so `python3 scripts/pack_sample.py out.json public/samples/flower_11_0.json` keeps every other bud frame plus all open frames and stores positions and thicknesses as base64 int16 (about 15 MB). `format.ts` unpacks it before validating. Files ending in `.gz` are also gunzipped on load. To refresh it from the shared export, run `npm run sample` (set `SRC` to use another file), then `npm run build`.
