@@ -5,7 +5,7 @@ Rust core for Automark Bloom. Stage 1 (bud formation and development) and stage 
 ```
 cargo run --release -- --seed 11 --json bud.json            # peony preset, flower 0
 cargo run --release -- --seed 11 --flower 3 --json bud.json # a sibling on the same plant
-cargo run --release -- --seed 11 --preview --json bud.json  # about 2.5x faster, less settled
+cargo run --release -- --seed 11 --preview --json bud.json  # about 2x faster, less settled
 cargo run --release -- --seed 11 --json bud.json --species dahlia.json
 cargo run --release -- --seed 11 --json bud.json --frames      # include the bud's growth stages
 cargo run --release -- --seed 11 --json flower.json --frames --open 24  # bud stages, then 24 opening frames

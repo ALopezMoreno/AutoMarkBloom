@@ -163,3 +163,20 @@ A profile of the bud showed the candidate search spending a quarter of its time 
 pairs. They already come out in triangle order, so a stable counting sort by node now gives
 the same (node, triangle) order in linear time, and the per-triangle cell ranges are worked out
 once rather than per row. Golden digests unchanged; the bud is about 6% faster.
+## All growth on the coarse grid (changes output)
+
+Every growth stage now relaxes on the 6×10 coarse grid (`coarse_fraction` 1.0, was 0.7), and
+the full grid only settles, for 40 iterations (was 75, after an extra 30-iteration relax and
+four full-grid stages). Profiling showed two thirds of the bud's time went to contact-list
+rebuilds on the full grid, and every node keeps moving there, so rebuilds came every five
+iterations whatever the skin; rebuilding only the petals that moved, or filtering a larger
+list, did not pay. The bud ends lower in energy, since the coarse grid relaxes the whole bud
+faster. Overlaps are unchanged; late crumples form on the coarse grid, so creases are a little
+broader. The preview preset is now 15/15, still about twice as fast. Golden digests re-blessed.
+
+| Bud, one thread | before | after |
+|---|---|---|
+| seed 11, native | 3.5 s, E 21245, overlap 0.61 t | 1.5 s, E 18892, overlap 0.72 t |
+| seed 2027, native | 1.9 s, E 25000, overlap 0.63 t | 0.9 s, E 22392, overlap 0.65 t |
+| seed 11, wasm (Node) | 4.1 s | 2.1 s |
+| seed 2027, wasm (Node) | 2.4 s | 1.2 s |
