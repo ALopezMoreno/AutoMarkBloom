@@ -246,9 +246,9 @@ impl System {
             let b = (key(hi, k).max(0.0) as usize).min(n[k] - 1);
             a..=b
         };
-        // Triangles go to threads in fixed chunks, joined in order and then
-        // sorted, so the list is the same on any number of cores.
-        let mut out = par::flat_map_chunks(self.tris.len(), |tris| {
+        // Triangles go to threads in fixed chunks, joined in order, so the
+        // list is the same on any number of cores.
+        let out = par::flat_map_chunks(self.tris.len(), |tris| {
             let mut out = Vec::new();
             for ti in tris {
                 let [a, b, c] = self.tris[ti];
@@ -264,10 +264,11 @@ impl System {
                     continue;
                 }
                 let owner = self.petal[a];
+                let xs = range(lo[0], hi[0], 0);
+                let ys = range(lo[1], hi[1], 1);
                 for gz in range(lo[2], hi[2], 2) {
-                    for gy in range(lo[1], hi[1], 1) {
+                    for gy in ys.clone() {
                         let row = (gz * n[1] + gy) * n[0];
-                        let xs = range(lo[0], hi[0], 0);
                         // Cells along x are contiguous, so scan them as one run.
                         for j in start[row + xs.start()]..start[row + xs.end() + 1] {
                             let p = pts[j];
@@ -290,8 +291,21 @@ impl System {
             }
             out
         });
-        out.sort_unstable_by_key(|c| (c.node, c.tri));
-        CandidateList { pairs: out, anchor: x.to_vec() }
+        // The pairs come in triangle order, so a stable counting sort by
+        // node leaves them sorted by (node, triangle), in linear time.
+        let mut first = vec![0usize; x.len() + 1];
+        for c in &out {
+            first[c.node + 1] += 1;
+        }
+        for i in 1..first.len() {
+            first[i] += first[i - 1];
+        }
+        let mut pairs = vec![Candidate { node: 0, tri: 0, d0: 0.0 }; out.len()];
+        for c in out {
+            pairs[first[c.node]] = c;
+            first[c.node] += 1;
+        }
+        CandidateList { pairs, anchor: x.to_vec() }
     }
 
     /// Candidates that are actually closer than their combined half-thickness.

@@ -156,3 +156,10 @@ Folds land in different places, but the crumpled character is kept (checked on s
 | seed 2027 | 3.8 s | 2.4 s |
 
 Most of the bud's time is now in the full-resolution stages and settle.
+
+## Cheaper contact-list rebuilds (output unchanged)
+
+A profile of the bud showed the candidate search spending a quarter of its time sorting its
+pairs. They already come out in triangle order, so a stable counting sort by node now gives
+the same (node, triangle) order in linear time, and the per-triangle cell ranges are worked out
+once rather than per row. Golden digests unchanged; the bud is about 6% faster.
