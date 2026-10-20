@@ -31,15 +31,15 @@ pub struct PackSettings {
     /// Keep every stage's geometry (for the swelling animation).
     pub record_frames: bool,
     /// Fraction of the growth stages relaxed on a half-resolution grid
-    /// (every other control point) before refining to the full grid. The
-    /// early stages only set the bud's broad shape; the late ones, which
-    /// crumple the petals, always run on the full grid. 0 disables it.
+    /// (every other control point) before refining to the full grid. Any
+    /// stages left run on the full grid. At 1 every stage runs coarse and the
+    /// full grid only settles. 0 disables it.
     pub coarse_fraction: f64,
 }
 
 impl Default for PackSettings {
     fn default() -> Self {
-        PackSettings { relax_iterations: 60, settle_iterations: 150, dt_max: 0.3, record_frames: false, coarse_fraction: 0.7 }
+        PackSettings { relax_iterations: 30, settle_iterations: 40, dt_max: 0.3, record_frames: false, coarse_fraction: 1.0 }
     }
 }
 
@@ -49,12 +49,12 @@ impl PackSettings {
         PackSettings { relax_iterations: 15, settle_iterations: 15, ..Self::default() }
     }
 
-    /// About two and a half times faster than the default, for browsing buds
+    /// About twice as fast as the default, for browsing buds
     /// interactively. Same plant, flower traits, petal layout and growth
     /// automaton draws, but the packing is less settled, so the geometry
     /// (and channels derived from it) differs slightly from the canonical bud.
     pub fn preview() -> Self {
-        PackSettings { relax_iterations: 25, settle_iterations: 50, ..Self::default() }
+        PackSettings { relax_iterations: 15, settle_iterations: 15, ..Self::default() }
     }
 }
 
@@ -477,7 +477,11 @@ pub fn develop(
     let mut scratch = vec![[0.0; 3]; n];
     let mut genv = 0.0;
     let start = start.unwrap_or_else(|| sys.energy(&x, env, &relax.cands, &mut scratch, &mut genv));
-    relax.run(&sys, &mut x, &mut env, &pinned, settings.relax_iterations, settings.dt_max);
+    // After the coarse grid has done every stage, the settle below is all
+    // the full grid needs.
+    if coarse_stages == 0 || coarse_stages < t.growth_stages {
+        relax.run(&sys, &mut x, &mut env, &pinned, settings.relax_iterations, settings.dt_max);
+    }
 
     if settings.record_frames && coarse_stages == 0 {
         frames.push(StageFrame { stage: 0, pos: snapshot(&x, sheets.len()), envelope: env.r });

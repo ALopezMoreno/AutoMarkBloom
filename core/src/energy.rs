@@ -19,6 +19,7 @@
 //! float sums never depend on search order.
 
 use crate::math;
+use crate::par;
 use crate::shells::Shells;
 
 #[derive(Clone, Copy, Debug)]
@@ -198,9 +199,8 @@ impl System {
     /// sorted, so the result does not depend on the grid at all; the grid
     /// only decides how many pairs get the exact distance test.
     pub fn candidates(&self, x: &[[f64; 3]], reach: f64) -> CandidateList {
-        let mut out = Vec::new();
         if x.is_empty() {
-            return CandidateList { pairs: out, anchor: vec![] };
+            return CandidateList { pairs: Vec::new(), anchor: vec![] };
         }
         let mut lo0 = [f64::MAX; 3];
         let mut hi0 = [f64::MIN; 3];
@@ -246,45 +246,66 @@ impl System {
             let b = (key(hi, k).max(0.0) as usize).min(n[k] - 1);
             a..=b
         };
-        for (ti, &[a, b, c]) in self.tris.iter().enumerate() {
-            let mut lo = [f64::MAX; 3];
-            let mut hi = [f64::MIN; 3];
-            for v in [a, b, c] {
-                for k in 0..3 {
-                    lo[k] = lo[k].min(x[v][k] - reach);
-                    hi[k] = hi[k].max(x[v][k] + reach);
+        // Triangles go to threads in fixed chunks, joined in order, so the
+        // list is the same on any number of cores.
+        let out = par::flat_map_chunks(self.tris.len(), |tris| {
+            let mut out = Vec::new();
+            for ti in tris {
+                let [a, b, c] = self.tris[ti];
+                let mut lo = [f64::MAX; 3];
+                let mut hi = [f64::MIN; 3];
+                for v in [a, b, c] {
+                    for k in 0..3 {
+                        lo[k] = lo[k].min(x[v][k] - reach);
+                        hi[k] = hi[k].max(x[v][k] + reach);
+                    }
                 }
-            }
-            if (0..3).any(|k| hi[k] < lo0[k] || lo[k] > hi0[k]) {
-                continue;
-            }
-            let owner = self.petal[a];
-            for gz in range(lo[2], hi[2], 2) {
-                for gy in range(lo[1], hi[1], 1) {
-                    let row = (gz * n[1] + gy) * n[0];
-                    let xs = range(lo[0], hi[0], 0);
-                    // Cells along x are contiguous, so scan them as one run.
-                    for j in start[row + xs.start()]..start[row + xs.end() + 1] {
-                        let p = pts[j];
-                        if pet[j] == owner || !(0..3).all(|k| p[k] >= lo[k] && p[k] <= hi[k]) {
-                            continue;
-                        }
-                        let w = closest_on_triangle(p, x[a], x[b], x[c]);
-                        let q = [
-                            w[0] * x[a][0] + w[1] * x[b][0] + w[2] * x[c][0],
-                            w[0] * x[a][1] + w[1] * x[b][1] + w[2] * x[c][1],
-                            w[0] * x[a][2] + w[1] * x[b][2] + w[2] * x[c][2],
-                        ];
-                        let d = norm(sub(p, q));
-                        if d < reach {
-                            out.push(Candidate { node: order[j], tri: ti, d0: d });
+                if (0..3).any(|k| hi[k] < lo0[k] || lo[k] > hi0[k]) {
+                    continue;
+                }
+                let owner = self.petal[a];
+                let xs = range(lo[0], hi[0], 0);
+                let ys = range(lo[1], hi[1], 1);
+                for gz in range(lo[2], hi[2], 2) {
+                    for gy in ys.clone() {
+                        let row = (gz * n[1] + gy) * n[0];
+                        // Cells along x are contiguous, so scan them as one run.
+                        for j in start[row + xs.start()]..start[row + xs.end() + 1] {
+                            let p = pts[j];
+                            if pet[j] == owner || !(0..3).all(|k| p[k] >= lo[k] && p[k] <= hi[k]) {
+                                continue;
+                            }
+                            let w = closest_on_triangle(p, x[a], x[b], x[c]);
+                            let q = [
+                                w[0] * x[a][0] + w[1] * x[b][0] + w[2] * x[c][0],
+                                w[0] * x[a][1] + w[1] * x[b][1] + w[2] * x[c][1],
+                                w[0] * x[a][2] + w[1] * x[b][2] + w[2] * x[c][2],
+                            ];
+                            let d = norm(sub(p, q));
+                            if d < reach {
+                                out.push(Candidate { node: order[j], tri: ti, d0: d });
+                            }
                         }
                     }
                 }
             }
+            out
+        });
+        // The pairs come in triangle order, so a stable counting sort by
+        // node leaves them sorted by (node, triangle), in linear time.
+        let mut first = vec![0usize; x.len() + 1];
+        for c in &out {
+            first[c.node + 1] += 1;
         }
-        out.sort_unstable_by_key(|c| (c.node, c.tri));
-        CandidateList { pairs: out, anchor: x.to_vec() }
+        for i in 1..first.len() {
+            first[i] += first[i - 1];
+        }
+        let mut pairs = vec![Candidate { node: 0, tri: 0, d0: 0.0 }; out.len()];
+        for c in out {
+            pairs[first[c.node]] = c;
+            first[c.node] += 1;
+        }
+        CandidateList { pairs, anchor: x.to_vec() }
     }
 
     /// Candidates that are actually closer than their combined half-thickness.
@@ -297,29 +318,33 @@ impl System {
     /// in a packed bud about 99% of candidates are skipped.
     pub fn contacts(&self, x: &[[f64; 3]], cands: &CandidateList) -> Vec<Contact> {
         let moved: Vec<f64> = x.iter().zip(&cands.anchor).map(|(p, q)| norm(sub(*p, *q))).collect();
-        let mut out = Vec::new();
-        for c in &cands.pairs {
-            let [a, b, cc] = self.tris[c.tri];
-            let tq = (self.thick[a] + self.thick[b] + self.thick[cc]) / 3.0;
-            let dmin = 0.5 * (self.thick[c.node] + tq);
-            // The small margin covers rounding in the bound itself.
-            if c.d0 - moved[c.node] - moved[a].max(moved[b]).max(moved[cc]) - 1e-9 >= dmin {
-                continue;
+        // Pairs in fixed chunks across threads, joined in order: the same
+        // list, in the same order, on any number of cores.
+        par::flat_map_chunks(cands.pairs.len(), |range| {
+            let mut out = Vec::new();
+            for c in &cands.pairs[range] {
+                let [a, b, cc] = self.tris[c.tri];
+                let tq = (self.thick[a] + self.thick[b] + self.thick[cc]) / 3.0;
+                let dmin = 0.5 * (self.thick[c.node] + tq);
+                // The small margin covers rounding in the bound itself.
+                if c.d0 - moved[c.node] - moved[a].max(moved[b]).max(moved[cc]) - 1e-9 >= dmin {
+                    continue;
+                }
+                let bary = closest_on_triangle(x[c.node], x[a], x[b], x[cc]);
+                let q = [
+                    bary[0] * x[a][0] + bary[1] * x[b][0] + bary[2] * x[cc][0],
+                    bary[0] * x[a][1] + bary[1] * x[b][1] + bary[2] * x[cc][1],
+                    bary[0] * x[a][2] + bary[1] * x[b][2] + bary[2] * x[cc][2],
+                ];
+                // Triangle-mean thickness (tq above) keeps dmin independent of where
+                // the closest point lands, so the contact gradient stays exact.
+                let d = norm(sub(x[c.node], q));
+                if d < dmin {
+                    out.push(Contact { node: c.node, tri: c.tri, bary, d, dmin });
+                }
             }
-            let bary = closest_on_triangle(x[c.node], x[a], x[b], x[cc]);
-            let q = [
-                bary[0] * x[a][0] + bary[1] * x[b][0] + bary[2] * x[cc][0],
-                bary[0] * x[a][1] + bary[1] * x[b][1] + bary[2] * x[cc][1],
-                bary[0] * x[a][2] + bary[1] * x[b][2] + bary[2] * x[cc][2],
-            ];
-            // Triangle-mean thickness (tq above) keeps dmin independent of where
-            // the closest point lands, so the contact gradient stays exact.
-            let d = norm(sub(x[c.node], q));
-            if d < dmin {
-                out.push(Contact { node: c.node, tri: c.tri, bary, d, dmin });
-            }
-        }
-        out
+            out
+        })
     }
 
     /// How much a layer's radius moves per unit of envelope radius: layers

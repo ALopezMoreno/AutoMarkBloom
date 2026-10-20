@@ -37,4 +37,4 @@ Rules the core follows to keep this true:
 
 - All randomness comes from `core/src/rng.rs` (PCG32 seeded through SplitMix64), never a library or OS RNG.
 - Transcendental maths (`exp`, `ln`, `sin`, `cos`, `pow`, `atan2`, ...) goes through the `libm` crate, since platform maths libraries differ in the last bit. `sqrt` and basic arithmetic are exact everywhere.
-- No hash-map iteration order or multithreaded float sums in anything that reaches the output.
+- No hash-map iteration order or multithreaded float sums in anything that reaches the output. Threads (`core/src/par.rs`) only find things in fixed chunks; sums run afterwards, in one thread and a fixed order.
